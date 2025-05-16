@@ -3,7 +3,7 @@
 
 
 ## How to run the project
-1. Clone the repository
+1. Clone the repository(Before this must install git,jdk17+ and maven)
 ```bash
 git clone https://github.com/NaYeM16551/Business-Connect.git
 ```
