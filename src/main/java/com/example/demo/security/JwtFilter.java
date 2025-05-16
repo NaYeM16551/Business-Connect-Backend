@@ -29,8 +29,11 @@ public class JwtFilter extends OncePerRequestFilter {
 
         String path = request.getServletPath();
         System.out.println("Request path: " + path);
-        // 1) Skip JWT processing on  /api/v1/auth/register and /login endpoints
-        if (path.equals("/api/v1/auth/login") || path.equals("/api/v1/auth/register") || path.equals("/api/v1/auth/forgot-password")) {
+       
+
+        // Skip filter for public routes
+        if (path.equals("/api/v1/auth/login") ||  path.equals("/api/v1/auth/forgot-password") || 
+                path.equals("/api/v1/auth/register-verify") || path.equals("/api/v1/auth/reset-password")) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -38,14 +41,13 @@ public class JwtFilter extends OncePerRequestFilter {
         String authHeader = request.getHeader("Authorization");
         String token = null;
         String email = null;
-
-        System.out.println("Authorization header: " + authHeader);
-
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             token = authHeader.substring(7);
+            System.out.println("Token: " + token);
             try {
                 // wrap extraction in try/catch to catch any malformed or tampered JWT
                 email = jwtUtil.extractEmail(token);
+                System.out.println("Email in filter : " + email);
                 if (email != null
                         && SecurityContextHolder.getContext().getAuthentication() == null
                         && jwtUtil.validateToken(token)) {

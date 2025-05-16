@@ -30,85 +30,457 @@ https://localhost:8001/api/v1
 
 ---
 
-## 1. Authentication & Profile
+Here’s the corrected Markdown snippet with proper fencing and spacing:
 
-### 1.1 Sign Up & Create Profile
+# Auth section API
 
-- **HTTP Method:** `POST`
-- **Endpoint:** `/auth/register`
-- **Description:** Register a new user and create their business profile.
+
+---
+
+## Table of Contents
+
+## Table of Contents
+
+1. [Email Verification](#1-email-verification)  
+   1.1 [Request Verification Code](#11-request-verification-code)  
+   1.2 [Verify Email Token](#12-verify-email-token)  
+2. [User Registration & Login](#2-user-registration--login)  
+   2.1 [Register User](#21-register-user)  
+   2.2 [Login](#22-login)  
+3. [Password Management](#3-password-management)  
+   3.1 [Forgot Password](#31-forgot-password)  
+   3.2 [Reset Password](#32-reset-password)  
+   3.3 [Change Password](#33-change-password)  
+4. [Profile Management](#4-profile-management)  
+   4.1 [Update Profile](#41-update-profile)  
+5. [Account Management](#5-account-management)  
+   5.1 [Delete Account](#51-delete-account)  
+  
+
+---
+
+## 1. Email Verification
+
+### 1.1 Request Verification Code
+
+- **Method:** `POST`  
+- **Endpoint:** `/register-verify`  
+- **Description:** Send a one-time verification email to the given address before registration.
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+
+
+
+
+
+**Responses:**
+
+* **200 OK**
+
+  ```json
+  {
+    "message": "Verification email sent",
+    "verificationToken": "<token>"      // optional, if you return it
+  }
+  ```
+* **400 Bad Request**
+
+  ```json
+  {
+    "error": "Email is required"
+  }
+  ```
+* **409 Conflict**
+
+  ```json
+  {
+    "error": "Email already registered."
+  }
+  ```
+* **500 Internal Server Error**
+
+  ```json
+  {
+    "error": "Failed to send verification email. Please try resending."
+  }
+  ```
+
+---
+
+### 1.2 Verify Email Token
+
+* **Method:** `GET`
+* **Endpoint:** `/verify-email?token=<emailToken>`
+* **Description:** Confirm the user’s email by validating the token sent in the verification email.
+
+**Query Parameters:**
+
+| Name  | Type   | Required | Description                  |
+| ----- | ------ | -------- | ---------------------------- |
+| token | String | Yes      | The email verification token |
+
+**Responses:**
+
+* **200 OK**
+
+  ```json
+  {
+    "message": "Email verified successfully."
+  }
+  ```
+* **400 Bad Request**
+
+  ```json
+  {
+    "error": "Invalid or expired verification token."
+  }
+  ```
+
+---
+
+## 2. User Registration & Login
+
+### 2.1 Register User
+
+* **Method:** `POST`
+* **Endpoint:** `/register`
+* **Description:** Create a new user account after email has been verified. Requires `Authorization` header with the Bearer token from **1.1**.
+
+**Headers:**
+
+```
+Authorization: Bearer <verificationToken>
+```
 
 **Request Body:**
 
 ```json
 {
-  "email": "sarah@example.com",
+  "email": "user@example.com",
   "password": "StrongPass!23",
-  "industry": "FinTech", //optional
-  "interests": ["Blockchain", "Payments"],
-  "achievements": "Seed-funded startup founder" // optioanl
+  // any additional registration fields your service requires
 }
 ```
 
-**Response:** `201 Created`
+**Responses:**
 
-```json
-{
-  "message": "Registration successful",
-  "user": { "id": "u_01", "email": "sarah@example.com" },
-  "token": "<JWT_TOKEN>"
-}
-```
+* **201 Created**
 
-Alternate flows:
-| Code | Description | Example Body |
-| ---- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 409 | Conflict – email already exists | `{ "error": "Email already registered." }` |
-| 500 | Internal Server Error – email delivery failed | `{ "error": "Failed to send verification email. Please try resending." }` |
+  ```json
+  {
+    "userId": "u_12345",
+    "email": "user@example.com",
+    "token": "<JWT_TOKEN>"
+  }
+  ```
+* **401 Unauthorized**
+
+  ```json
+  {
+    "error": "Missing or invalid Authorization header (Did you verify your email?)"
+  }
+  ```
+* **409 Conflict**
+
+  ```json
+  {
+    "error": "User with this email already exists."
+  }
+  ```
+* **500 Internal Server Error**
+
+  ```json
+  {
+    "error": "Registration failed. Please try again later."
+  }
+  ```
 
 ---
 
-### 1.2 Verify Email
+### 2.2 Login
 
-- **Endpoint:** `GET /auth/verify?token=<emailToken>`
-- **Description:** Activate account by clicking the emailed link.
-
-**Response:** `200 OK`
-
-```json
-{ "message": "Email verified. Profile active." }
-```
-
----
-
-### 1.3 Update Profile
-
-- **Endpoint:** `PATCH profile`
-- **Description:** Update industry, interests, achievements, etc.
+* **Method:** `POST`
+* **Endpoint:** `/login`
+* **Description:** Authenticate a user and return a JWT.
 
 **Request Body:**
 
 ```json
 {
-  "industry": "InsurTech",
-  "interests": ["Risk Modeling"],
-  "achievements": "Series A investor"
+  "email": "user@example.com",
+  "password": "StrongPass!23"
 }
 ```
 
-**Response:** `200 OK`
+**Responses:**
 
-```json
-{ "message": "Profile updated successfully" }
-```
+* **200 OK**
 
-| Status Code | Description                                                                    |
-| ----------- | ------------------------------------------------------------------------------ |
-| 400         | Bad Request – invalid data submitted (e.g., empty strings, overly long values) |
-| 401         | Unauthorized – JWT missing or invalid                                          |
-| 500         | Internal Server Error – something went wrong on the server side                |
+  ```json
+  {
+    "userId": "u_12345",
+    "email": "user@example.com",
+    "token": "<JWT_TOKEN>"
+  }
+  ```
+* **401 Unauthorized**
+
+  ```json
+  {
+    "error": "Invalid email or password."
+  }
+  ```
+* **500 Internal Server Error**
+
+  ```json
+  {
+    "error": "Login failed. Please try again later."
+  }
+  ```
 
 ---
+
+## 3. Password Management
+
+### 3.1 Forgot Password
+
+* **Method:** `POST`
+* **Endpoint:** `/forgot-password`
+* **Description:** Send a password-reset email with a one-time token.
+
+**Request Body:**
+
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Responses:**
+
+* **200 OK**
+
+  ```json
+  {
+    "message": "Password reset email sent successfully"
+  }
+  ```
+* **400 Bad Request**
+
+  ```json
+  {
+    "error": "Email is required"
+  }
+  ```
+* **500 Internal Server Error**
+
+  ```json
+  {
+    "error": "Failed to send password reset email"
+  }
+  ```
+
+---
+
+### 3.2 Reset Password
+
+* **Method:** `POST`
+* **Endpoint:** `/reset-password?token=<resetToken>`
+* **Description:** Update the user’s password using the reset token.
+
+**Query Parameters:**
+
+| Name  | Type   | Required | Description              |
+| ----- | ------ | -------- | ------------------------ |
+| token | String | Yes      | The password reset token |
+
+**Request Body:**
+
+```json
+{
+  "newPassword": "NewStrongPass!45"
+}
+```
+
+**Responses:**
+
+* **200 OK**
+
+  ```json
+  {
+    "message": "Password updated successfully"
+  }
+  ```
+* **400 Bad Request**
+
+  ```json
+  {
+    "error": "Invalid or expired reset token."
+  }
+  ```
+* **500 Internal Server Error**
+
+  ```json
+  {
+    "error": "Failed to update password"
+  }
+  ```
+
+---
+
+### 3.3 Change Password
+
+* **Method:** `POST`
+* **Endpoint:** `/change-password`
+* **Description:** Change password for an authenticated user. Requires JWT.
+
+**Headers:**
+
+```
+Authorization: Bearer <JWT_TOKEN>
+```
+
+**Request Body:**
+
+```json
+{
+  "oldPassword": "OldPass!23",
+  "newPassword": "NewPass!45"
+}
+```
+
+**Responses:**
+
+* **200 OK**
+
+  ```json
+  {
+    "message": "Password changed successfully"
+  }
+  ```
+* **401 Unauthorized**
+
+  ```json
+  {
+    "error": "Missing or invalid Authorization header"
+  }
+  ```
+* **500 Internal Server Error**
+
+  ```json
+  {
+    "error": "Failed to change password"
+  }
+  ```
+
+---
+
+## 4. Profile Management
+
+### 4.1 Update Profile
+
+* **Method:** `PATCH`
+* **Endpoint:** `/update-profile`
+* **Description:** Update user’s profile details. Requires JWT.
+
+**Headers:**
+
+```
+Authorization: Bearer <JWT_TOKEN>
+```
+
+**Request Body:**
+
+```json
+{
+  "email": "new-email@example.com",         // optional
+  "password": "OptionalNewPass!99",          // optional
+  // any other updatable profile fields...
+}
+```
+
+**Responses:**
+
+* **200 OK**
+
+  ```json
+  {
+    "message": "Profile updated successfully"
+  }
+  ```
+* **400 Bad Request**
+
+  ```json
+  {
+    "error": "Invalid request data"
+  }
+  ```
+* **401 Unauthorized**
+
+  ```json
+  {
+    "error": "Missing or invalid Authorization header"
+  }
+  ```
+* **500 Internal Server Error**
+
+  ```json
+  {
+    "error": "Failed to update profile"
+  }
+  ```
+
+---
+
+## 5. Account Management
+
+### 5.1 Delete Account
+
+* **Method:** `DELETE`
+* **Endpoint:** `/delete-account`
+* **Description:** Permanently delete the authenticated user’s account. Requires JWT.
+
+**Headers:**
+
+```
+Authorization: Bearer <JWT_TOKEN>
+```
+
+**Responses:**
+
+* **200 OK**
+
+  ```json
+  {
+    "message": "Account deleted successfully"
+  }
+  ```
+* **401 Unauthorized**
+
+  ```json
+  {
+    "error": "Missing or invalid Authorization header"
+  }
+  ```
+* **500 Internal Server Error**
+
+  ```json
+  {
+    "error": "Failed to delete account"
+  }
+  ```
+
+---
+
+```
+```
+
 
 ## 2. Posts & Interactions
 

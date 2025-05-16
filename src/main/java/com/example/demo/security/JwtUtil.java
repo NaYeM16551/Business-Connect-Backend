@@ -20,7 +20,7 @@ public class JwtUtil {
     private  long accessTokenExpiration; // 1 day in ms
 
     private Key getSignKey() {
-        System.out.println("JWT Secret: " + jwtSecret);
+        
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
 
@@ -34,12 +34,20 @@ public class JwtUtil {
     }
 
     public String extractEmail(String token) {
-        return Jwts.parserBuilder()
+        {
+           
+            return Jwts.parserBuilder()
                 .setSigningKey(getSignKey())
                 .build()
                 .parseClaimsJws(token)
                 .getBody()
                 .getSubject();
+               
+        }
+        
+        
+                
+               
     }
 
     public boolean validateToken(String token) {

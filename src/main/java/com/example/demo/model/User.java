@@ -37,11 +37,13 @@ public class User {
     @Column(nullable = false)
     private List<String> interests;
 
+    @ElementCollection
     private List<String> achievements; // Optional
 
-    private boolean isVerified = false;
-    private String verificationToken;
-    private LocalDateTime verificationTokenExpiry;
+    private String resetPasswordToken;
+    private LocalDateTime resetPasswordTokenExpiry;
+
+    
 
     // Constructors
     public User() {
@@ -114,27 +116,19 @@ public class User {
         this.achievements = achievements;
     }
 
-    public boolean getIsVerified() {
-        return isVerified;
+    
+    public String getResetPasswordToken() {
+        return resetPasswordToken;
+    }
+    public void setResetPasswordToken(String resetPasswordToken) {
+        this.resetPasswordToken = resetPasswordToken;
+    }
+    public LocalDateTime getResetPasswordTokenExpiry() {
+        return resetPasswordTokenExpiry;
+    }
+    public void setResetPasswordTokenExpiry(LocalDateTime resetPasswordTokenExpiry) {
+        this.resetPasswordTokenExpiry = resetPasswordTokenExpiry;
     }
 
-    public void setIsVerified(boolean isVerified) {
-        this.isVerified = isVerified;
-    }
-
-    public String getVerificationToken() {
-        return verificationToken;
-    }
-
-    public void setVerificationToken(String verificationToken) {
-        this.verificationToken = verificationToken;
-    }
-
-    public LocalDateTime getVerificationTokenExpiry() {
-        return verificationTokenExpiry;
-    }
-
-    public void setVerificationTokenExpiry(LocalDateTime verificationTokenExpiry) {
-        this.verificationTokenExpiry = verificationTokenExpiry;
-    }
+   
 }

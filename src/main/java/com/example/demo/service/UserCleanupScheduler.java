@@ -2,7 +2,7 @@
 
 package com.example.demo.service;
 
-import com.example.demo.repository.UserRepository;
+import com.example.demo.repository.RegisterVerifyUserRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -12,17 +12,17 @@ import java.time.LocalDateTime;
 @Component
 public class UserCleanupScheduler {
 
-    private final UserRepository userRepository;
+    private final RegisterVerifyUserRepository registerVerifyUserRepository;
 
-    public UserCleanupScheduler(UserRepository userRepository) {
-        this.userRepository = userRepository;
+    public UserCleanupScheduler(RegisterVerifyUserRepository registerVerifyUserRepository) {
+        this.registerVerifyUserRepository = registerVerifyUserRepository;
     }
 
     @Scheduled(cron = "0 0 * * * *") // every hour
     @Transactional
     public void deleteStaleUnverifiedUsers() {
         LocalDateTime cutoff = LocalDateTime.now().minusSeconds(50);
-        userRepository.deleteAllByIsVerifiedFalseAndVerificationTokenExpiryBefore(cutoff);
+        registerVerifyUserRepository.deleteAllByIsVerifiedFalseAndVerificationTokenExpiryBefore(cutoff);
         System.out.println("🧹 Old unverified users cleaned up");
     }
 }

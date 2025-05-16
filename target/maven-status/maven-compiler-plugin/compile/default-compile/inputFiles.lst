@@ -5,8 +5,11 @@ D:\spring-boot\demo\demo\Business-Connect\src\main\java\com\example\demo\dto\Log
 D:\spring-boot\demo\demo\Business-Connect\src\main\java\com\example\demo\dto\LoginResponse.java
 D:\spring-boot\demo\demo\Business-Connect\src\main\java\com\example\demo\dto\RegisterRequest.java
 D:\spring-boot\demo\demo\Business-Connect\src\main\java\com\example\demo\dto\RegisterResponse.java
+D:\spring-boot\demo\demo\Business-Connect\src\main\java\com\example\demo\dto\RegisterVerifyResponse.java
 D:\spring-boot\demo\demo\Business-Connect\src\main\java\com\example\demo\dto\ResetPasswordRequest.java
+D:\spring-boot\demo\demo\Business-Connect\src\main\java\com\example\demo\model\RegisterVerifyUser.java
 D:\spring-boot\demo\demo\Business-Connect\src\main\java\com\example\demo\model\User.java
+D:\spring-boot\demo\demo\Business-Connect\src\main\java\com\example\demo\repository\RegisterVerifyUserRepository.java
 D:\spring-boot\demo\demo\Business-Connect\src\main\java\com\example\demo\repository\UserRepository.java
 D:\spring-boot\demo\demo\Business-Connect\src\main\java\com\example\demo\security\JwtFilter.java
 D:\spring-boot\demo\demo\Business-Connect\src\main\java\com\example\demo\security\JwtUtil.java
