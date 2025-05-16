@@ -103,7 +103,6 @@ public class User {
     }
 
     public void setInterests(List<String> interests) {
-        System.out.println("Setting interests: " + interests.get(0));
         this.interests = interests;
     }
 
