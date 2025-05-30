@@ -34,31 +34,27 @@ public class AuthController {
 
         try {
             var response = authService.registerVerify(email);
-            return ResponseEntity.ok(response);
+            return ResponseEntity.ok(Map.of("message", response));
+
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(Map.of("error", "Failed to send verification email. Please try resending."));
+                    .body(Map.of("error", e.getMessage() != null ? e.getMessage()
+                            : "Registration verification failed. Please try again later."));
         }
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody RegisterRequest request,HttpServletRequest httpRequest) {
-        String authHeader = httpRequest.getHeader("Authorization");
+    public ResponseEntity<?> register(@RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "Missing or invalid Authorization header(Did you verify your email?)"));
-        }
-
-        String token = authHeader.substring(7); // safely removes "Bearer "
         try {
-            RegisterResponse response = authService.register(request,token);
+            RegisterResponse response = authService.register(request);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
+            // System.out.println("Error during registration: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error",
                             e.getMessage() != null ? e.getMessage() : "Registration failed. Please try again later."));
@@ -109,7 +105,8 @@ public class AuthController {
     }
 
     @PostMapping("/reset-password")
-    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> request, @RequestParam("token") String token) {
+    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> request,
+            @RequestParam("token") String token) {
 
         try {
             String newPassword = request.get("newPassword");
@@ -173,12 +170,12 @@ public class AuthController {
         String oldPassword = request.get("oldPassword");
 
         try {
-            authService.changePassword(token, newPassword,oldPassword);
+            authService.changePassword(token, newPassword, oldPassword);
             return ResponseEntity.ok(Map.of("message", "Password changed successfully"));
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", e.getMessage() != null ? e.getMessage() : "Failed to change password"));
         }
     }
-    
+
 }

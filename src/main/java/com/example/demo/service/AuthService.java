@@ -4,7 +4,6 @@ import com.example.demo.dto.LoginRequest;
 import com.example.demo.dto.LoginResponse;
 import com.example.demo.dto.RegisterRequest;
 import com.example.demo.dto.RegisterResponse;
-import com.example.demo.dto.RegisterVerifyResponse;
 import com.example.demo.model.RegisterVerifyUser;
 import com.example.demo.model.User;
 import com.example.demo.repository.RegisterVerifyUserRepository;
@@ -42,7 +41,7 @@ public class AuthService {
         this.registerVerifyUserRepository = registerVerifyUserRepository;
     }
 
-    public RegisterVerifyResponse registerVerify(String email) {
+    public String registerVerify(String email) {
         Optional<RegisterVerifyUser> optional = registerVerifyUserRepository.findByEmail(email);
 
         RegisterVerifyUser user;
@@ -77,20 +76,19 @@ public class AuthService {
 
         mailService.sendVerificationEmail(user.getEmail(), user.getVerificationToken(), url);
 
-        String token = jwtUtil.generateToken(user.getEmail());
-        return new RegisterVerifyResponse(
-                "Verification email sent", token);
+        return new String(
+                "Verification email sent");
     }
 
-    public RegisterResponse register(RegisterRequest request, String token) {
+    public RegisterResponse register(RegisterRequest request) {
 
-        String email = jwtUtil.extractEmail(token);
+        // String email = jwtUtil.extractEmail(token);
 
-        if (!email.equals(request.email)) {
-            throw new IllegalArgumentException("Email mismatch");
-        }
+        // if (!email.equals(request.email)) {
+        //     throw new IllegalArgumentException("Email mismatch");
+        // }
 
-        Optional<RegisterVerifyUser> optionalVerifyUser = registerVerifyUserRepository.findByEmail(email);
+        Optional<RegisterVerifyUser> optionalVerifyUser = registerVerifyUserRepository.findByEmail(request.email);
 
         if ((optionalVerifyUser.isPresent() && !optionalVerifyUser.get().getIsVerified())
                 || !optionalVerifyUser.isPresent()) {
@@ -134,7 +132,7 @@ public class AuthService {
             throw new IllegalArgumentException("Invalid password");
         }
 
-        String token = jwtUtil.generateToken(user.getEmail());
+        String token = jwtUtil.generateToken(user);
 
         return new LoginResponse(
                 "Login successful",

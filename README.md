@@ -30,3 +30,24 @@ mvn spring-boot:run
     - APIs active(login,register,verify-email,update-profile)
     - E.g: Open your web browser and go to `http://localhost:8080/api/v1/auth/login` to access the API.
 
+8. Steps for database connection
+   - This project uses postgresql database.
+   - Create a database named `business_connect` in your PostgreSQL server.
+   - Look at the application.properties file in the src/main/resources directory.
+   - Update the database connection details in the application.properties file:
+```properties
+spring.datasource.url=jdbc:postgresql://localhost:5432/business_connect
+spring.datasource.username=your_database_username 
+spring.datasource.password=your_database_password 
+
+#import these from .env file 
+```
+   - Make sure you have the PostgreSQL JDBC driver in your classpath. If not, you can add it as a dependency in your `pom.xml` file:
+```xml
+<dependency>
+    <groupId>org.postgresql</groupId>
+    <artifactId>postgresql</artifactId>
+    <version>42.7.3</version>
+</dependency>
+```
+   - After updating the database connection details, you can run the application again, and it should connect to the PostgreSQL database.

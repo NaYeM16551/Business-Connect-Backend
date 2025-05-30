@@ -1,1 +1,0 @@
-mvn -q spring-boot:run

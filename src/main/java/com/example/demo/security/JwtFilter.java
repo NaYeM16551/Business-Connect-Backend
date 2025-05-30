@@ -29,30 +29,32 @@ public class JwtFilter extends OncePerRequestFilter {
 
         String path = request.getServletPath();
         System.out.println("Request path: " + path);
-       
+
 
         // Skip filter for public routes
-        if (path.equals("/api/v1/auth/login") ||  path.equals("/api/v1/auth/forgot-password") || 
-                path.equals("/api/v1/auth/register-verify") || path.equals("/api/v1/auth/reset-password")) {
+         if (path.equals("/api/v1/auth/login") || path.equals("/api/v1/auth/forgot-password") ||
+                path.equals("/api/v1/auth/register-verify") || path.equals("/api/v1/auth/reset-password")
+                || path.equals("/api/v1/auth/register")) {
             filterChain.doFilter(request, response);
             return;
         }
 
         String authHeader = request.getHeader("Authorization");
+        System.out.println("Authorization header: " + authHeader);
         String token = null;
-        String email = null;
+        Long userID = null;
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             token = authHeader.substring(7);
             System.out.println("Token: " + token);
             try {
                 // wrap extraction in try/catch to catch any malformed or tampered JWT
-                email = jwtUtil.extractEmail(token);
-                System.out.println("Email in filter : " + email);
-                if (email != null
+                userID = jwtUtil.extractUserId(token);
+                //System.out.println("Email in filter : " + email);
+                if (userID != null
                         && SecurityContextHolder.getContext().getAuthentication() == null
                         && jwtUtil.validateToken(token)) {
 
-                    UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(email, null,
+                    UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(userID, null,
                             null);
                     auth.setDetails(new WebAuthenticationDetailsSource()
                             .buildDetails(request));
@@ -63,7 +65,7 @@ public class JwtFilter extends OncePerRequestFilter {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.setContentType("application/json");
                 response.getWriter().write("{\"error\": \"Invalid or expired token\"}");
-                return; 
+                return;
             }
         }
 
