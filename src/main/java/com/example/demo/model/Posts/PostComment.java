@@ -1,6 +1,7 @@
 package com.example.demo.model.Posts;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 
 import com.example.demo.model.User;
 
@@ -8,8 +9,13 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+
+import jakarta.persistence.CascadeType;
+import java.util.List;
 
 @Entity
 @Table(name = "post_comments")
@@ -26,6 +32,21 @@ public class PostComment {
 
     private String content;
     private LocalDateTime commentedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_comment_id")
+    private PostComment parentComment;
+
+    // Optional: for fetching replies
+    @OneToMany(mappedBy = "parentComment", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<PostComment> replies = new ArrayList<>();
+
+    // Getters and Setters for parentComment and replies (add to your class)
+    public PostComment getParentComment() { return parentComment; }
+    public void setParentComment(PostComment parentComment) { this.parentComment = parentComment; }
+
+    public List<PostComment> getReplies() { return replies; }
+    public void setReplies(List<PostComment> replies) { this.replies = replies; }
 
     // Getters and Setters
     public Long getId() {

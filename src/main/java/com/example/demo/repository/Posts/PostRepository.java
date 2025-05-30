@@ -1,9 +1,20 @@
 package com.example.demo.repository.Posts;
 
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import com.example.demo.model.Posts.Post;
 
 public interface PostRepository extends JpaRepository<Post, Long> {
     // Add custom query methods if needed
+    @Query("SELECT p FROM Post p LEFT JOIN FETCH p.media WHERE p.id = :postId")
+    Optional<Post> findByIdWithMedia(@Param("postId") Long postId);
+
+    @Query("SELECT DISTINCT p FROM Post p LEFT JOIN FETCH p.media WHERE p.user.id = :userId")
+    Optional<List<Post>> getPostsByUserId(@Param("userId") Long userId);
+
 }

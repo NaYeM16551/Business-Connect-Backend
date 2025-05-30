@@ -48,6 +48,12 @@ public class Post {
         this.id = id;
     }
 
+    public User getUser() {
+        return user;
+    }
+    public void setUser(User user) {
+        this.user = user;
+    }
 
     public String getContent() {
         return content;
@@ -89,7 +95,5 @@ public class Post {
         this.likes = likes;
     }
 
-    public void setUser(User author) {
-        this.user = author;
-    }
+    
 }

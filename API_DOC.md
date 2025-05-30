@@ -34,28 +34,26 @@ Here’s the corrected Markdown snippet with proper fencing and spacing:
 
 # Auth section API
 
-
 ---
 
-## Table of Contents
+## 1-authentication--profile
 
 ## Table of Contents
 
 1. [Email Verification](#1-email-verification)  
    1.1 [Request Verification Code](#11-request-verification-code)  
-   1.2 [Verify Email Token](#12-verify-email-token)  
+   1.2 [Verify Email Token](#12-verify-email-token)
 2. [User Registration & Login](#2-user-registration--login)  
    2.1 [Register User](#21-register-user)  
-   2.2 [Login](#22-login)  
+   2.2 [Login](#22-login)
 3. [Password Management](#3-password-management)  
    3.1 [Forgot Password](#31-forgot-password)  
    3.2 [Reset Password](#32-reset-password)  
-   3.3 [Change Password](#33-change-password)  
+   3.3 [Change Password](#33-change-password)
 4. [Profile Management](#4-profile-management)  
-   4.1 [Update Profile](#41-update-profile)  
+   4.1 [Update Profile](#41-update-profile)
 5. [Account Management](#5-account-management)  
-   5.1 [Delete Account](#51-delete-account)  
-  
+   5.1 [Delete Account](#51-delete-account)
 
 ---
 
@@ -63,47 +61,46 @@ Here’s the corrected Markdown snippet with proper fencing and spacing:
 
 ### 1.1 Request Verification Code
 
-- **Method:** `POST`  
-- **Endpoint:** `/register-verify`  
+- **Method:** `POST`
+- **Endpoint:** `/register-verify`
 - **Description:** Send a one-time verification email to the given address before registration.
 
 **Request Body:**
+
 ```json
 {
   "email": "user@example.com"
 }
 ```
 
-
-
-
-
-
 **Responses:**
 
-* **200 OK**
+- **200 OK**
 
   ```json
   {
     "message": "Verification email sent",
-    "verificationToken": "<token>"      // optional, if you return it
+    "verificationToken": "<token>" // optional, if you return it
   }
   ```
-* **400 Bad Request**
+
+- **400 Bad Request**
 
   ```json
   {
     "error": "Email is required"
   }
   ```
-* **409 Conflict**
+
+- **409 Conflict**
 
   ```json
   {
     "error": "Email already registered."
   }
   ```
-* **500 Internal Server Error**
+
+- **500 Internal Server Error**
 
   ```json
   {
@@ -115,9 +112,9 @@ Here’s the corrected Markdown snippet with proper fencing and spacing:
 
 ### 1.2 Verify Email Token
 
-* **Method:** `GET`
-* **Endpoint:** `/verify-email?token=<emailToken>`
-* **Description:** Confirm the user’s email by validating the token sent in the verification email.
+- **Method:** `GET`
+- **Endpoint:** `/verify-email?token=<emailToken>`
+- **Description:** Confirm the user’s email by validating the token sent in the verification email.
 
 **Query Parameters:**
 
@@ -127,14 +124,15 @@ Here’s the corrected Markdown snippet with proper fencing and spacing:
 
 **Responses:**
 
-* **200 OK**
+- **200 OK**
 
   ```json
   {
     "message": "Email verified successfully."
   }
   ```
-* **400 Bad Request**
+
+- **400 Bad Request**
 
   ```json
   {
@@ -148,9 +146,9 @@ Here’s the corrected Markdown snippet with proper fencing and spacing:
 
 ### 2.1 Register User
 
-* **Method:** `POST`
-* **Endpoint:** `/register`
-* **Description:** Create a new user account after email has been verified. Requires `Authorization` header with the Bearer token from **1.1**.
+- **Method:** `POST`
+- **Endpoint:** `/register`
+- **Description:** Create a new user account after email has been verified. Requires `Authorization` header with the Bearer token from **1.1**.
 
 **Headers:**
 
@@ -163,14 +161,14 @@ Authorization: Bearer <verificationToken>
 ```json
 {
   "email": "user@example.com",
-  "password": "StrongPass!23",
+  "password": "StrongPass!23"
   // any additional registration fields your service requires
 }
 ```
 
 **Responses:**
 
-* **201 Created**
+- **201 Created**
 
   ```json
   {
@@ -179,21 +177,24 @@ Authorization: Bearer <verificationToken>
     "token": "<JWT_TOKEN>"
   }
   ```
-* **401 Unauthorized**
+
+- **401 Unauthorized**
 
   ```json
   {
     "error": "Missing or invalid Authorization header (Did you verify your email?)"
   }
   ```
-* **409 Conflict**
+
+- **409 Conflict**
 
   ```json
   {
     "error": "User with this email already exists."
   }
   ```
-* **500 Internal Server Error**
+
+- **500 Internal Server Error**
 
   ```json
   {
@@ -205,9 +206,9 @@ Authorization: Bearer <verificationToken>
 
 ### 2.2 Login
 
-* **Method:** `POST`
-* **Endpoint:** `/login`
-* **Description:** Authenticate a user and return a JWT.
+- **Method:** `POST`
+- **Endpoint:** `/login`
+- **Description:** Authenticate a user and return a JWT.
 
 **Request Body:**
 
@@ -220,7 +221,7 @@ Authorization: Bearer <verificationToken>
 
 **Responses:**
 
-* **200 OK**
+- **200 OK**
 
   ```json
   {
@@ -229,14 +230,16 @@ Authorization: Bearer <verificationToken>
     "token": "<JWT_TOKEN>"
   }
   ```
-* **401 Unauthorized**
+
+- **401 Unauthorized**
 
   ```json
   {
     "error": "Invalid email or password."
   }
   ```
-* **500 Internal Server Error**
+
+- **500 Internal Server Error**
 
   ```json
   {
@@ -250,9 +253,9 @@ Authorization: Bearer <verificationToken>
 
 ### 3.1 Forgot Password
 
-* **Method:** `POST`
-* **Endpoint:** `/forgot-password`
-* **Description:** Send a password-reset email with a one-time token.
+- **Method:** `POST`
+- **Endpoint:** `/forgot-password`
+- **Description:** Send a password-reset email with a one-time token.
 
 **Request Body:**
 
@@ -264,21 +267,23 @@ Authorization: Bearer <verificationToken>
 
 **Responses:**
 
-* **200 OK**
+- **200 OK**
 
   ```json
   {
     "message": "Password reset email sent successfully"
   }
   ```
-* **400 Bad Request**
+
+- **400 Bad Request**
 
   ```json
   {
     "error": "Email is required"
   }
   ```
-* **500 Internal Server Error**
+
+- **500 Internal Server Error**
 
   ```json
   {
@@ -290,9 +295,9 @@ Authorization: Bearer <verificationToken>
 
 ### 3.2 Reset Password
 
-* **Method:** `POST`
-* **Endpoint:** `/reset-password?token=<resetToken>`
-* **Description:** Update the user’s password using the reset token.
+- **Method:** `POST`
+- **Endpoint:** `/reset-password?token=<resetToken>`
+- **Description:** Update the user’s password using the reset token.
 
 **Query Parameters:**
 
@@ -310,21 +315,23 @@ Authorization: Bearer <verificationToken>
 
 **Responses:**
 
-* **200 OK**
+- **200 OK**
 
   ```json
   {
     "message": "Password updated successfully"
   }
   ```
-* **400 Bad Request**
+
+- **400 Bad Request**
 
   ```json
   {
     "error": "Invalid or expired reset token."
   }
   ```
-* **500 Internal Server Error**
+
+- **500 Internal Server Error**
 
   ```json
   {
@@ -336,9 +343,9 @@ Authorization: Bearer <verificationToken>
 
 ### 3.3 Change Password
 
-* **Method:** `POST`
-* **Endpoint:** `/change-password`
-* **Description:** Change password for an authenticated user. Requires JWT.
+- **Method:** `POST`
+- **Endpoint:** `/change-password`
+- **Description:** Change password for an authenticated user. Requires JWT.
 
 **Headers:**
 
@@ -357,21 +364,23 @@ Authorization: Bearer <JWT_TOKEN>
 
 **Responses:**
 
-* **200 OK**
+- **200 OK**
 
   ```json
   {
     "message": "Password changed successfully"
   }
   ```
-* **401 Unauthorized**
+
+- **401 Unauthorized**
 
   ```json
   {
     "error": "Missing or invalid Authorization header"
   }
   ```
-* **500 Internal Server Error**
+
+- **500 Internal Server Error**
 
   ```json
   {
@@ -385,9 +394,9 @@ Authorization: Bearer <JWT_TOKEN>
 
 ### 4.1 Update Profile
 
-* **Method:** `PATCH`
-* **Endpoint:** `/update-profile`
-* **Description:** Update user’s profile details. Requires JWT.
+- **Method:** `PATCH`
+- **Endpoint:** `/update-profile`
+- **Description:** Update user’s profile details. Requires JWT.
 
 **Headers:**
 
@@ -399,36 +408,39 @@ Authorization: Bearer <JWT_TOKEN>
 
 ```json
 {
-  "email": "new-email@example.com",         // optional
-  "password": "OptionalNewPass!99",          // optional
+  "email": "new-email@example.com", // optional
+  "password": "OptionalNewPass!99" // optional
   // any other updatable profile fields...
 }
 ```
 
 **Responses:**
 
-* **200 OK**
+- **200 OK**
 
   ```json
   {
     "message": "Profile updated successfully"
   }
   ```
-* **400 Bad Request**
+
+- **400 Bad Request**
 
   ```json
   {
     "error": "Invalid request data"
   }
   ```
-* **401 Unauthorized**
+
+- **401 Unauthorized**
 
   ```json
   {
     "error": "Missing or invalid Authorization header"
   }
   ```
-* **500 Internal Server Error**
+
+- **500 Internal Server Error**
 
   ```json
   {
@@ -442,9 +454,9 @@ Authorization: Bearer <JWT_TOKEN>
 
 ### 5.1 Delete Account
 
-* **Method:** `DELETE`
-* **Endpoint:** `/delete-account`
-* **Description:** Permanently delete the authenticated user’s account. Requires JWT.
+- **Method:** `DELETE`
+- **Endpoint:** `/delete-account`
+- **Description:** Permanently delete the authenticated user’s account. Requires JWT.
 
 **Headers:**
 
@@ -454,21 +466,23 @@ Authorization: Bearer <JWT_TOKEN>
 
 **Responses:**
 
-* **200 OK**
+- **200 OK**
 
   ```json
   {
     "message": "Account deleted successfully"
   }
   ```
-* **401 Unauthorized**
+
+- **401 Unauthorized**
 
   ```json
   {
     "error": "Missing or invalid Authorization header"
   }
   ```
-* **500 Internal Server Error**
+
+- **500 Internal Server Error**
 
   ```json
   {
@@ -478,69 +492,343 @@ Authorization: Bearer <JWT_TOKEN>
 
 ---
 
-```
-```
-
-
 ## 2. Posts & Interactions
+
+### Table of Contents
+
+1. [Create & Manage Posts](#21-create-post)  
+   1.1 [Create Post](#21-create-post)  
+   1.2 [Get Post by ID](#22-get-post-by-id)  
+   1.3 [Get User's Own Posts](#23-get-users-own-posts)  
+   1.4 [Get Posts by User ID](#24-get-posts-by-user-id)  
+   1.5 [Delete Post](#25-delete-post)
+
+2. [Post Interactions](#26-like-post)  
+   2.1 [Like Post](#26-like-post)  
+   2.2 [Comment on Post](#27-comment-on-post)  
+   2.3 [Get Post Comments](#28-get-post-comments)  
+   2.4 [Delete Comment](#29-delete-comment)
+
+All post-related endpoints are prefixed with `/api/v1/posts`
 
 ### 2.1 Create Post
 
-- **Endpoint:** `POST /posts`
-- **Description:** Publish a new idea with optional media.
+- **Method:** `POST`
+- **Endpoint:** `/create-post`
+- **Description:** Create a new post with content and optional media files
+- **Content-Type:** `multipart/form-data`
+
+**Request Parameters:**
+
+- `content` (string, required): The text content of the post
+- `files` (array of files, optional): Media files to be attached to the post
+
+**Response:** `200 OK`
+
+```json
+{
+  "message": "Post created",
+  "postId": 123
+}
+```
+
+**Error Responses:**
+
+| Status Code | Description                           | Response Body                         |
+| ----------- | ------------------------------------- | ------------------------------------- |
+| 401         | Unauthorized - User not authenticated | `{"error": "User not authenticated"}` |
+| 500         | Internal Server Error                 | `{"error": "Error message"}`          |
+
+### 2.2 Get Post by ID
+
+- **Method:** `GET`
+- **Endpoint:** `/{postId}`
+- **Description:** Retrieve a specific post by its ID
+
+**Response:** `200 OK`
+
+```json
+{
+  "id": 252,
+  "content": "Ami Nayem,BUET,CSE-2020",
+  "media": [
+    {
+      "mediaUrl": "https://res.cloudinary.com/dv7lfz0nc/image/upload_v1748601330/qtx5lltyhdfoyy45h1lx.jpg",
+      "mediaType": "image/jpeg"
+    }
+  ],
+  "createdAt": "2025-05-30T16:35:22.146274"
+}
+```
+
+**Error Responses:**
+
+| Status Code | Description           | Response Body                |
+| ----------- | --------------------- | ---------------------------- |
+| 500         | Internal Server Error | `{"error": "Error message"}` |
+
+### 2.3 Get User's Own Posts
+
+- **Method:** `GET`
+- **Endpoint:** `/me`
+- **Description:** Get all posts created by the authenticated user
+
+**Response:** `200 OK`
+
+```json
+[
+  {
+    "id": 202,
+    "content": "Ami Nayem,BUET,CSE",
+    "media": [
+      {
+        "mediaUrl": "https://res.cloudinary.com/dv7lfz0nc/image/upload_v1748600416/mpeilbmyflk8pxkhlt3q.jpg",
+        "mediaType": "image/jpeg"
+      }
+    ],
+    "createdAt": "2025-05-30T16:19:49.44687"
+  },
+  {
+    "id": 252,
+    "content": "Ami Nayem,BUET,CSE-2020",
+    "media": [
+      {
+        "mediaUrl": "https://res.cloudinary.com/dv7lfz0nc/image/upload_v1748601330/qtx5lltyhdfoyy45h1lx.jpg",
+        "mediaType": "image/jpeg"
+      }
+    ],
+    "createdAt": "2025-05-30T16:35:22.146274"
+  }
+]
+```
+
+**Error Responses:**
+
+| Status Code | Description           | Response Body                         |
+| ----------- | --------------------- | ------------------------------------- |
+| 401         | Unauthorized          | `{"error": "User not authenticated"}` |
+| 500         | Internal Server Error | `{"error": "Error message"}`          |
+
+### 2.4 Get Posts by User ID
+
+- **Method:** `GET`
+- **Endpoint:** `/user/{userId}`
+- **Description:** Get all posts created by a specific user
+
+**Response:** `200 OK`
+
+```json
+[
+  {
+    "id": 202,
+    "content": "Ami Nayem,BUET,CSE",
+    "media": [
+      {
+        "mediaUrl": "https://res.cloudinary.com/dv7lfz0nc/image/upload_v1748600416/mpeilbmyflk8pxkhlt3q.jpg",
+        "mediaType": "image/jpeg"
+      }
+    ],
+    "createdAt": "2025-05-30T16:19:49.44687"
+  },
+  {
+    "id": 252,
+    "content": "Ami Nayem,BUET,CSE-2020",
+    "media": [
+      {
+        "mediaUrl": "https://res.cloudinary.com/dv7lfz0nc/image/upload_v1748601330/qtx5lltyhdfoyy45h1lx.jpg",
+        "mediaType": "image/jpeg"
+      }
+    ],
+    "createdAt": "2025-05-30T16:35:22.146274"
+  }
+]
+```
+
+**Error Responses:**
+
+| Status Code | Description           | Response Body                |
+| ----------- | --------------------- | ---------------------------- |
+| 500         | Internal Server Error | `{"error": "Error message"}` |
+
+### 2.5 Delete Post
+
+- **Method:** `DELETE`
+- **Endpoint:** `/{postId}`
+- **Description:** Delete a specific post
+
+**Response:** `200 OK`
+
+```json
+{
+  "message": "Post deleted successfully"
+}
+```
+
+**Error Responses:**
+
+| Status Code | Description           | Response Body                         |
+| ----------- | --------------------- | ------------------------------------- |
+| 401         | Unauthorized          | `{"error": "User not authenticated"}` |
+| 500         | Internal Server Error | `{"error": "Error message"}`          |
+
+### 2.6 Like Post
+
+- **Method:** `POST`
+- **Endpoint:** `/like/{postId}`
+- **Description:** Like/React to a post with different reaction types
 
 **Request Body:**
 
 ```json
 {
-  "title": "Micro-loan App for SMBs",
-  "description": "A scalable P2P lending platform...",
-  "category": "FinTech",
-  "mediaUrls": ["https://.../pitch.pdf"] //optional
+  "likeType": 1 // 0: no-react, 1: love, 2: like, 3: wow, 4: angry, 5: haha
 }
 ```
 
-**Response:** `201 Created`
+**Response:** `200 OK`
 
 ```json
-{ "postId": "p_123", "status": "live" }
+{
+  "message": "Post liked successfully"
+}
 ```
 
-| Status Code | Description                        | Example Body                                                             |
-| ----------- | ---------------------------------- | ------------------------------------------------------------------------ |
-| 400         | Bad Request – policy violation     | `{ "error": "Policy violation: please revise your content." }`           |
-| 502         | Bad Gateway – media upload failure | `{ "error": "Media upload failed: service unavailable, please retry." }` |
+**Error Responses:**
 
-### 2.2 Like & Comment
+| Status Code | Description           | Response Body                               |
+| ----------- | --------------------- | ------------------------------------------- |
+| 401         | Unauthorized          | `{"error": "User not authenticated"}`       |
+| 400         | Bad Request           | `{"error": "Invalid user ID in Principal"}` |
+| 500         | Internal Server Error | `{"error": "Error message"}`                |
 
-#### Like a Post
+### 2.7 Comment on Post
 
-- **Endpoint:** `POST /posts/{postId}/like`
-- **Response:** `200 OK`
-
-```json
-{ "likes": 42 }
-```
-
-#### Comment on a Post
-
-- **Endpoint:** `POST /posts/{postId}/comments`
+- **Method:** `POST`
+- **Endpoint:** `/comment/{postId}`
+- **Description:** Add a comment to a post, supports nested comments
 
 **Request Body:**
 
 ```json
-{ "text": "Great idea—how do you handle compliance?" }
+{
+  "comment": "Comment text",
+  "parentCommentId": "123" // Optional, for nested comments
+}
 ```
 
-**Response:** `201 Created`
+**Response:** `200 OK`
 
 ```json
-{ "commentId": "c_456", "message": "Comment added" }
+{
+  "commentId": 123
+}
 ```
 
----
+**Error Responses:**
 
----
+| Status Code | Description           | Response Body                               |
+| ----------- | --------------------- | ------------------------------------------- |
+| 401         | Unauthorized          | `{"error": "User not authenticated"}`       |
+| 400         | Bad Request           | `{"error": "Invalid user ID in Principal"}` |
+| 500         | Internal Server Error | `{"error": "Error message"}`                |
+
+### 2.8 Get Post Comments
+
+- **Method:** `GET`
+- **Endpoint:** `/comments/{postId}`
+- **Description:** Get all comments for a specific post
+
+**Response:** `200 OK`
+
+```json
+[
+  {
+    "authorName": "nayem78",
+    "commentedAt": "2025-05-31T01:28:28.213684",
+    "content": "Nice picture vaya",
+    "id": 1,
+    "parentCommentId": null,
+    "replies": []
+  },
+  {
+    "authorName": "nayem78",
+    "commentedAt": "2025-05-31T01:29:02.742114",
+    "content": "Nice picture vaya",
+    "id": 2,
+    "parentCommentId": null,
+    "replies": []
+  },
+  {
+    "authorName": "nayem78",
+    "commentedAt": "2025-05-31T01:34:13.823938",
+    "content": "Nice picture vaya",
+    "id": 52,
+    "parentCommentId": null,
+    "replies": []
+  },
+  {
+    "authorName": "nayem78",
+    "commentedAt": "2025-05-31T01:35:16.603443",
+    "content": "Nice picture vaya",
+    "id": 53,
+    "parentCommentId": null,
+    "replies": []
+  },
+  {
+    "authorName": "nayem78",
+    "commentedAt": "2025-05-31T01:37:24.619591",
+    "content": "Nice picture vaya",
+    "id": 102,
+    "parentCommentId": null,
+    "replies": []
+  },
+  {
+    "authorName": "nayem78",
+    "commentedAt": "2025-05-31T01:38:01.262217",
+    "content": "Nice picture vaya",
+    "id": 152,
+    "parentCommentId": null,
+    "replies": []
+  },
+  {
+    "authorName": "nayem78",
+    "commentedAt": "2025-05-31T01:51:35.486207",
+    "content": "Nice picture vaya",
+    "id": 253,
+    "parentCommentId": null,
+    "replies": []
+  }
+]
+```
+
+**Error Responses:**
+
+| Status Code | Description           | Response Body                |
+| ----------- | --------------------- | ---------------------------- |
+| 500         | Internal Server Error | `{"error": "Error message"}` |
+
+### 2.9 Delete Comment
+
+- **Method:** `DELETE`
+- **Endpoint:** `/{postId}/comment/{commentId}`
+- **Description:** Delete a specific comment from a post(supports nested comments,if parentComment is deleted, all child comments will be deleted)
+- **Note:** Requires the user to be the author of the comment or an admin
+
+**Response:** `200 OK`
+
+```json
+{
+  "message": "Comment deleted successfully"
+}
+```
+
+**Error Responses:**
+
+| Status Code | Description           | Response Body                               |
+| ----------- | --------------------- | ------------------------------------------- |
+| 401         | Unauthorized          | `{"error": "User not authenticated"}`       |
+| 400         | Bad Request           | `{"error": "Invalid user ID in Principal"}` |
+| 500         | Internal Server Error | `{"error": "Error message"}`                |
 
 ## 3. Hackathons
 
@@ -945,5 +1233,3 @@ Alternate flow: empty array → suggest broadening criteria.
 ## Versioning & Changelog
 
 - **v1.0** – Initial release covering UC01–UC12
-
----
