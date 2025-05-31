@@ -497,17 +497,19 @@ Authorization: Bearer <JWT_TOKEN>
 ### Table of Contents
 
 1. [Create & Manage Posts](#21-create-post)  
-   1.1 [Create Post](#21-create-post)  
-   1.2 [Get Post by ID](#22-get-post-by-id)  
-   1.3 [Get User's Own Posts](#23-get-users-own-posts)  
-   1.4 [Get Posts by User ID](#24-get-posts-by-user-id)  
-   1.5 [Delete Post](#25-delete-post)
+  1.1 [Create Post](#21-create-post)  
+  1.2 [Edit Post](#212-edit-post)  
+  1.3 [Get Post by ID](#22-get-post-by-id)  
+  1.4 [Get User's Own Posts](#23-get-users-own-posts)  
+  1.5 [Get Posts by User ID](#24-get-posts-by-user-id)  
+  1.6 [Delete Post](#25-delete-post)
 
 2. [Post Interactions](#26-like-post)  
-   2.1 [Like Post](#26-like-post)  
-   2.2 [Comment on Post](#27-comment-on-post)  
-   2.3 [Get Post Comments](#28-get-post-comments)  
-   2.4 [Delete Comment](#29-delete-comment)
+  2.1 [Like Post](#26-like-post)  
+  2.2 [Comment on Post](#27-comment-on-post)  
+  2.3 [Get Post Comments](#28-get-post-comments)  
+  2.4 [Delete Comment](#29-delete-comment)  
+  2.5 [Edit Comment](#30-edit-comment)
 
 All post-related endpoints are prefixed with `/api/v1/posts`
 
@@ -538,6 +540,29 @@ All post-related endpoints are prefixed with `/api/v1/posts`
 | ----------- | ------------------------------------- | ------------------------------------- |
 | 401         | Unauthorized - User not authenticated | `{"error": "User not authenticated"}` |
 | 500         | Internal Server Error                 | `{"error": "Error message"}`          |
+
+### 2.1.2 Edit post
+- **Method:** `PUT`
+- **Endpoint:** `/{postId}`
+- **Description:** Edit an existing post by its ID
+- **Content-Type:** `multipart/form-data`
+
+**Request Parameters:**
+- `content` (string, required): The updated text content of the post
+- `files` (array of files, optional): Updated media files to be attached to the post
+**Response:** `200 OK`
+
+```json
+{
+  "message": "Post updated successfully"
+}
+```
+**Error Responses:**
+| Status Code | Description                           | Response Body                         |
+| ----------- | ------------------------------------- | ------------------------------------- |
+| 401         | Unauthorized - User not authenticated | `{"error": "User not authenticated"}` |
+| 500         | Internal Server Error                 | `{"error": "Error message"}`          |
+
 
 ### 2.2 Get Post by ID
 
@@ -819,6 +844,27 @@ All post-related endpoints are prefixed with `/api/v1/posts`
 ```json
 {
   "message": "Comment deleted successfully"
+}
+```
+
+**Error Responses:**
+
+| Status Code | Description           | Response Body                               |
+| ----------- | --------------------- | ------------------------------------------- |
+| 401         | Unauthorized          | `{"error": "User not authenticated"}`       |
+| 400         | Bad Request           | `{"error": "Invalid user ID in Principal"}` |
+| 500         | Internal Server Error | `{"error": "Error message"}`                |
+
+### 3.0 Edit Comment
+
+- **Method:** `PUT`
+- **Endpoint:** `/{postId}/comment/{commentId}`
+- **Description:** Edit a specific comment on a post
+- **Request Body:**
+
+```json
+{
+  "comment": "Updated comment text"
 }
 ```
 

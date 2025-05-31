@@ -18,7 +18,17 @@ public class CloudinaryService {
     }
 
     public String uploadFile(MultipartFile file) throws IOException {
-        Map<?, ?> uploadResult = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.emptyMap());
-        return uploadResult.get("secure_url").toString(); // Returns the image URL
+        Map<?, ?> uploadResult = cloudinary.uploader()
+                .upload(
+                        file.getBytes(),
+                        ObjectUtils.asMap(
+                                "resource_type", "auto"));
+        return uploadResult.get("secure_url").toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    public void deleteFile(String publicId, String resourceType) throws IOException {
+        Map<String, Object> opts = (Map<String, Object>) ObjectUtils.asMap("resource_type", resourceType);
+        cloudinary.uploader().destroy(publicId, opts);
     }
 }

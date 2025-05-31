@@ -25,7 +25,7 @@ public class PostController {
     @PostMapping(value = "/create-post", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> createPost(
             @RequestParam("content") String content,
-            @RequestParam("files") MultipartFile[] files,
+            @RequestParam(value = "files", required = false) MultipartFile[] files,
             Principal principal) {
         try {
 
@@ -43,6 +43,35 @@ public class PostController {
                     .body(Map.of("error", e.getMessage()));
         }
     }
+
+    @PutMapping("/{postId}")
+    public ResponseEntity<?> editPost(
+            @PathVariable Long postId,
+            @RequestParam("content") String content,
+            @RequestParam(value = "files", required = false) MultipartFile[] files,
+            Principal principal) {
+        try {
+            // 1) Extract user ID from Principal
+            if (principal == null || principal.getName() == null) {
+                return ResponseEntity
+                        .status(HttpStatus.UNAUTHORIZED)
+                        .body(Map.of("error", "User not authenticated"));
+            }
+            Long userId = Long.valueOf(principal.getName());
+
+            // 2) Delegate to service
+            postService.editPost(postId, content, files, userId);
+
+            // 3) Return success response
+            return ResponseEntity.ok(Map.of("message", "Post edited successfully"));
+        } catch (Exception e) {
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+   
 
     @GetMapping("/{postId}")
     public ResponseEntity<?> getPostById(@PathVariable Long postId) {
@@ -157,7 +186,7 @@ public class PostController {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid user ID in Principal"));
         }
         try {
-            Long comment_id=postService.commentOnPost(postId, userId, commentMap.get("comment"),Long.valueOf(commentMap.get("parentCommentId")));
+            Long comment_id=postService.commentOnPost(postId, userId, commentMap.get("comment"),Long.valueOf(commentMap.get("parentCommentId")==null? "-10":commentMap.get("parentCommentId")));
             return ResponseEntity.ok(Map.of("commentId", comment_id));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
@@ -199,6 +228,35 @@ public class PostController {
         try {
             postService.deleteComment(postId, commentId, userId);
             return ResponseEntity.ok(Map.of("message", "Comment deleted successfully"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/{postId}/comment/{commentId}")
+    public ResponseEntity<?> editComment(
+            @PathVariable Long postId,
+            @PathVariable Long commentId,
+            @RequestBody Map<String, String> commentMap,
+            Principal principal) {
+        if (principal == null || principal.getName() == null) {
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "User not authenticated"));
+        }
+        Long userId;
+        try {
+            userId = Long.valueOf(principal.getName());
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid user ID in Principal"));
+        }
+        try {
+            postService.editComment(postId, commentId, userId, commentMap.get("comment"));
+            return ResponseEntity.ok(Map.of("message", "Comment edited successfully"));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
