@@ -29,6 +29,8 @@ public class Post {
 
     private String content;
     private LocalDateTime createdAt;
+    private Long shareCount=0L;
+    private Long parentPostId= null; // For shared posts, this will reference the original post
 
     @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PostMedia> media = new ArrayList<>();
@@ -95,5 +97,25 @@ public class Post {
         this.likes = likes;
     }
 
-    
+    public Long getShareCount() {
+        return shareCount;
+    }
+    public void setShareCount(Long shareCount) {
+        this.shareCount = shareCount;
+        // Update the share count in the database or perform any necessary actions
+    }
+
+    public void incrementShareCount() {
+        if (this.shareCount == null) {
+            this.shareCount = 0L;
+        }
+        this.shareCount++;
+    }
+
+    public Long getParentPostId() {
+        return parentPostId;
+    }
+    public void setParentPostId(Long parentPostId) {
+        this.parentPostId = parentPostId;
+    }
 }

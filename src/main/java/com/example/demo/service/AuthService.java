@@ -10,6 +10,8 @@ import com.example.demo.repository.RegisterVerifyUserRepository;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.security.JwtUtil;
 
+import com.example.demo.repository.Follow_Unfollow.FollowUnfollowRepository;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -28,17 +30,20 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
     private final RegisterVerifyUserRepository registerVerifyUserRepository;
+    private final FollowUnfollowRepository followUnfollowRepository;
 
     @Value("${frontend.url}")
     private String frontendUrl;
 
     public AuthService(UserRepository userRepository, JwtUtil jwtUtil, PasswordEncoder passwordEncoder,
-            MailService mailService, RegisterVerifyUserRepository registerVerifyUserRepository) {
+            MailService mailService, RegisterVerifyUserRepository registerVerifyUserRepository,
+            FollowUnfollowRepository followUnfollowRepository) {
         this.userRepository = userRepository;
         this.jwtUtil = jwtUtil;
         this.passwordEncoder = passwordEncoder;
         this.mailService = mailService;
         this.registerVerifyUserRepository = registerVerifyUserRepository;
+        this.followUnfollowRepository = followUnfollowRepository;
     }
 
     public String registerVerify(String email) {
@@ -82,11 +87,7 @@ public class AuthService {
 
     public RegisterResponse register(RegisterRequest request) {
 
-        // String email = jwtUtil.extractEmail(token);
 
-        // if (!email.equals(request.email)) {
-        //     throw new IllegalArgumentException("Email mismatch");
-        // }
 
         Optional<RegisterVerifyUser> optionalVerifyUser = registerVerifyUserRepository.findByEmail(request.email);
 
@@ -97,8 +98,8 @@ public class AuthService {
         }
 
         Optional<User> optional = userRepository.findByEmail(request.email);
-
         User user;
+
         if (optional.isPresent()) {
             throw new IllegalArgumentException("Email already registered.");
 
@@ -197,6 +198,8 @@ public class AuthService {
             RegisterVerifyUser verifyUser = optionalVerifyUser.get();
             registerVerifyUserRepository.delete(verifyUser);
         }
+
+        followUnfollowRepository.deleteByUserId(user.getId());
     }
 
     public void updatePassword(String token, String newPassword) {
@@ -219,12 +222,12 @@ public class AuthService {
 
     }
 
-    public void changePassword(String token, String newPassword,String oldPassword) {
+    public void changePassword(String token, String newPassword, String oldPassword) {
         String email = jwtUtil.extractEmail(token);
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
-        
-        if(!passwordEncoder.matches(oldPassword, user.getPassword())) {
+
+        if (!passwordEncoder.matches(oldPassword, user.getPassword())) {
             throw new IllegalArgumentException("Invalid old password");
         }
 

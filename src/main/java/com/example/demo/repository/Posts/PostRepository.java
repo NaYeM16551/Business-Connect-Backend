@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -16,5 +17,11 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 
     @Query("SELECT DISTINCT p FROM Post p LEFT JOIN FETCH p.media WHERE p.user.id = :userId")
     Optional<List<Post>> getPostsByUserId(@Param("userId") Long userId);
+
+    @Modifying
+    @Query("UPDATE Post p " +
+           "SET p.parentPostId = -1 " +
+           "WHERE p.parentPostId = :deletedId")
+    int unsetParentForChildren(@Param("deletedId") Long deletedId);
 
 }

@@ -154,6 +154,8 @@ public class PostService {
             throw new RuntimeException("You can only delete your own posts");
         }
 
+        postRepo.unsetParentForChildren(postId);
+
         // 3) For each media entry, delete its file from Cloudinary
         List<PostMedia> mediaList = post.getMedia();
         for (PostMedia pm : mediaList) {
@@ -479,5 +481,53 @@ public class PostService {
         // 6) Save the updated comment
         postCommentRepo.save(comment);
     }
+
+    @Transactional
+    public Long sharePost(Long postId, Long userId,String shareContent) {
+        // 1) Load the original post
+        Post originalPost = postRepo.findById(postId)
+            .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+
+        // 2) Load the user who is doing the share
+        User sharingUser = userRepo.findById(userId)
+            .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        // 3) Create a new Post entity representing the "shared" post
+        Post sharedPost = new Post();
+        sharedPost.setUser(sharingUser);
+
+        // Copy the content from original → you can also choose to leave it blank
+        sharedPost.setContent(shareContent);
+
+        // Set the timestamp for when the share happened
+        sharedPost.setCreatedAt(LocalDateTime.now());
+        
+        boolean originalParentExist = originalPost.getParentPostId() != null && originalPost.getParentPostId() != -1;
+
+        if(originalParentExist)
+        {
+            Post originalParentPost = postRepo.findById(originalPost.getParentPostId())
+                .orElseThrow(() -> new IllegalArgumentException("Original parent post not found"));
+            originalParentPost.incrementShareCount();
+            postRepo.save(originalParentPost);    
+            
+                
+        }
+        // Mark this new post as a “child” of the original
+        sharedPost.setParentPostId(originalParentExist ? originalPost.getParentPostId() : originalPost.getId());
+
+        // A brand‐new shared post starts with zero shares of its own
+        sharedPost.setShareCount(0L);
+
+        // 4) Persist the new "shared" post
+        postRepo.save(sharedPost);
+
+        // 5) Increment the original’s shareCount and persist
+        originalPost.incrementShareCount();
+        postRepo.save(originalPost);
+
+        return sharedPost.getId();
+    }
+    
 
 }

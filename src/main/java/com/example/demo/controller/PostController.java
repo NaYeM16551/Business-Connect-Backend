@@ -266,4 +266,32 @@ public class PostController {
         }
     }
 
+    @PostMapping("/share/{postId}")
+    public ResponseEntity<?> sharePost(
+            @PathVariable Long postId,
+            @RequestBody Map<String, String> contentMap,
+            Principal principal) {
+        if (principal == null || principal.getName() == null) {
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "User not authenticated"));
+        }
+        Long userId;
+        try {
+            userId = Long.valueOf(principal.getName());
+        } catch (NumberFormatException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Invalid user ID in Principal"));
+        }
+        try {
+            var sharedPostId = postService.sharePost(postId, userId, contentMap.get("content"));
+            return ResponseEntity.ok(Map.of("message", "Post shared successfully", "sharedPostId", sharedPostId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
 }

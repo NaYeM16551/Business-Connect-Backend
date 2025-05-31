@@ -43,6 +43,8 @@ public class User {
     private String resetPasswordToken;
     private LocalDateTime resetPasswordTokenExpiry;
 
+    private String profilePictureUrl;
+
     
 
     // Constructors
@@ -129,6 +131,14 @@ public class User {
     public void setResetPasswordTokenExpiry(LocalDateTime resetPasswordTokenExpiry) {
         this.resetPasswordTokenExpiry = resetPasswordTokenExpiry;
     }
+
+    public String getProfilePictureUrl() {
+        return profilePictureUrl;
+    }
+    public void setProfilePictureUrl(String profilePictureUrl) {
+        this.profilePictureUrl = profilePictureUrl;
+    }
+    
 
    
 }

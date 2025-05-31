@@ -25,8 +25,7 @@ https://localhost:8001/api/v1
 7. [Learning](#7-learning)
 8. [Groups & Community](#8-groups--community)
 9. [User Following](#9-user-following)
-10. [Common Response Errors](#common-response-errors)
-11. [Versioning & Changelog](#versioning--changelog)
+10. [Versioning & Changelog](#versioning--changelog)
 
 ---
 
@@ -160,9 +159,12 @@ Authorization: Bearer <verificationToken>
 
 ```json
 {
-  "email": "user@example.com",
-  "password": "StrongPass!23"
-  // any additional registration fields your service requires
+  "username": "M.M.Nabil",
+  "email": "nabil2005@gmail.com",
+  "password": "nayem123",
+  "industry": ["Technology", "Finance"],
+  "interests": ["Machine Learning", "Blockchain"],
+  "achievements": ["Published a research paper", "Speaker at TechConf 2024"]
 }
 ```
 
@@ -497,19 +499,20 @@ Authorization: Bearer <JWT_TOKEN>
 ### Table of Contents
 
 1. [Create & Manage Posts](#21-create-post)  
-  1.1 [Create Post](#21-create-post)  
-  1.2 [Edit Post](#212-edit-post)  
-  1.3 [Get Post by ID](#22-get-post-by-id)  
-  1.4 [Get User's Own Posts](#23-get-users-own-posts)  
-  1.5 [Get Posts by User ID](#24-get-posts-by-user-id)  
-  1.6 [Delete Post](#25-delete-post)
+   1.1 [Create Post](#21-create-post)  
+   1.2 [Edit Post](#212-edit-post)  
+   1.3 [Get Post by ID](#22-get-post-by-id)  
+   1.4 [Get User's Own Posts](#23-get-users-own-posts)  
+   1.5 [Get Posts by User ID](#24-get-posts-by-user-id)  
+   1.6 [Delete Post](#25-delete-post)  
+   1.7 [Share Post](#210-share-post)
 
 2. [Post Interactions](#26-like-post)  
-  2.1 [Like Post](#26-like-post)  
-  2.2 [Comment on Post](#27-comment-on-post)  
-  2.3 [Get Post Comments](#28-get-post-comments)  
-  2.4 [Delete Comment](#29-delete-comment)  
-  2.5 [Edit Comment](#30-edit-comment)
+   2.1 [Like Post](#26-like-post)  
+   2.2 [Comment on Post](#27-comment-on-post)  
+   2.3 [Get Post Comments](#28-get-post-comments)  
+   2.4 [Delete Comment](#29-delete-comment)  
+   2.5 [Edit Comment](#30-edit-comment)
 
 All post-related endpoints are prefixed with `/api/v1/posts`
 
@@ -542,27 +545,29 @@ All post-related endpoints are prefixed with `/api/v1/posts`
 | 500         | Internal Server Error                 | `{"error": "Error message"}`          |
 
 ### 2.1.2 Edit post
+
 - **Method:** `PUT`
 - **Endpoint:** `/{postId}`
 - **Description:** Edit an existing post by its ID
 - **Content-Type:** `multipart/form-data`
 
 **Request Parameters:**
+
 - `content` (string, required): The updated text content of the post
 - `files` (array of files, optional): Updated media files to be attached to the post
-**Response:** `200 OK`
+  **Response:** `200 OK`
 
 ```json
 {
   "message": "Post updated successfully"
 }
 ```
-**Error Responses:**
-| Status Code | Description                           | Response Body                         |
-| ----------- | ------------------------------------- | ------------------------------------- |
-| 401         | Unauthorized - User not authenticated | `{"error": "User not authenticated"}` |
-| 500         | Internal Server Error                 | `{"error": "Error message"}`          |
 
+**Error Responses:**
+| Status Code | Description | Response Body |
+| ----------- | ------------------------------------- | ------------------------------------- |
+| 401 | Unauthorized - User not authenticated | `{"error": "User not authenticated"}` |
+| 500 | Internal Server Error | `{"error": "Error message"}` |
 
 ### 2.2 Get Post by ID
 
@@ -865,6 +870,37 @@ All post-related endpoints are prefixed with `/api/v1/posts`
 ```json
 {
   "comment": "Updated comment text"
+}
+```
+
+**Error Responses:**
+
+| Status Code | Description           | Response Body                               |
+| ----------- | --------------------- | ------------------------------------------- |
+| 401         | Unauthorized          | `{"error": "User not authenticated"}`       |
+| 400         | Bad Request           | `{"error": "Invalid user ID in Principal"}` |
+| 500         | Internal Server Error | `{"error": "Error message"}`                |
+
+### 2.10 Share Post
+
+- **Method:** `POST`
+- **Endpoint:** `/share/{postId}`
+- **Description:** Share an existing post with optional additional content
+
+**Request Body:**
+
+```json
+{
+  "content": "Optional comment on the shared post"
+}
+```
+
+**Response:** `200 OK`
+
+```json
+{
+  "message": "Post shared successfully",
+  "sharedPostId": 123
 }
 ```
 
@@ -1207,74 +1243,126 @@ Alternate flow: empty array → suggest broadening criteria.
 
 ## 9. User Following
 
-### 9.1 Follow / Unfollow User
 
-#### Follow User
+### Table of Contents
 
-- **Endpoint:** `POST /users/{userId}/follow`
-- **Responses:**
+1. [Connection Management](#91-connection-management)  
+   1.1 [Follow User](#91-follow-user)  
+   1.2 [Unfollow User](#92-unfollow-user)
 
-| Status | Description                            | Example Body                                |
-| ------ | -------------------------------------- | ------------------------------------------- |
-| 200    | Now following the user                 | `{ "message": "Now following user u_02." }` |
-| 401    | Unauthorized – missing/invalid JWT     | `{ "error": "Missing or invalid JWT." }`    |
-| 404    | Not Found – target user does not exist | `{ "error": "User not found." }`            |
-| 500    | Internal Server Error                  | `{ "error": "Failed to follow user." }`     |
+2. [Connection Lists](#93-get-followers--following)  
+   2.1 [Get Following List](#get-following)  
+   2.2 [Get Followers List](#get-followers)
 
-#### Unfollow User
+All connection-related endpoints are prefixed with `/api/v1/connections`
 
-- **Endpoint:** `DELETE /users/{userId}/follow`
-- **Responses:**
+### 9.1 Follow User
 
-| Status | Description                            | Example Body                              |
-| ------ | -------------------------------------- | ----------------------------------------- |
-| 204    | Unfollowed successfully (no content)   | _empty body_                              |
-| 401    | Unauthorized – missing/invalid JWT     | `{ "error": "Missing or invalid JWT." }`  |
-| 404    | Not Found – target user does not exist | `{ "error": "User not found." }`          |
-| 500    | Internal Server Error                  | `{ "error": "Failed to unfollow user." }` |
+- **Method:** `POST`
+- **Endpoint:** `/follow/{userID}`
+- **Description:** Follow another user
 
----
+**Response:** `200 OK`
 
-### 9.2 Get Followers & Following
+```json
+{
+  "message": "Successfully followed user {userID}"
+}
+```
 
-#### Get Followers
+**Error Responses:**
 
-- **Endpoint:** `GET /users/{userId}/followers`
-- **Responses:**
+| Status Code | Description           | Response Body                         |
+| ----------- | --------------------- | ------------------------------------- |
+| 401         | Unauthorized          | `{"error": "User not authenticated"}` |
+| 403         | Forbidden             | `{"error": "Cannot follow yourself"}` |
+| 404         | Not Found             | `{"error": "User not found"}`         |
+| 500         | Internal Server Error | `{"error": "Error message"}`          |
 
-| Status | Description                        | Example Body                                                                                  |
-| ------ | ---------------------------------- | --------------------------------------------------------------------------------------------- |
-| 200    | List of followers                  | `json<br>[<br>  { "id": "u_05", "name": "Anita" },<br>  { "id": "u_08", "name": "Jin" }<br>]` |
-| 401    | Unauthorized – missing/invalid JWT | `{ "error": "Missing or invalid JWT." }`                                                      |
-| 404    | Not Found – user does not exist    | `{ "error": "User not found." }`                                                              |
-| 500    | Internal Server Error              | `{ "error": "Failed to fetch followers." }`                                                   |
+### 9.2 Unfollow User
 
-#### Get Following
+- **Method:** `DELETE`
+- **Endpoint:** `/unfollow/{userID}`
+- **Description:** Unfollow a previously followed user
 
-- **Endpoint:** `GET /users/{userId}/following`
-- **Responses:**
+**Response:** `200 OK`
 
-| Status | Description                        | Example Body                                                                                 |
-| ------ | ---------------------------------- | -------------------------------------------------------------------------------------------- |
-| 200    | List of users being followed       | `json<br>[<br>  { "id": "u_02", "name": "Sara" },<br>  { "id": "u_07", "name": "Lee" }<br>]` |
-| 401    | Unauthorized – missing/invalid JWT | `{ "error": "Missing or invalid JWT." }`                                                     |
-| 404    | Not Found – user does not exist    | `{ "error": "User not found." }`                                                             |
-| 500    | Internal Server Error              | `{ "error": "Failed to fetch following list." }`                                             |
+```json
+{
+  "message": "Successfully unfollowed user {userID}"
+}
+```
 
----
+**Error Responses:**
 
-## Common Response Errors
+| Status Code | Description           | Response Body                         |
+| ----------- | --------------------- | ------------------------------------- |
+| 401         | Unauthorized          | `{"error": "User not authenticated"}` |
+| 404         | Not Found             | `{"error": "User not found"}`         |
+| 500         | Internal Server Error | `{"error": "Error message"}`          |
 
-| Status | Description                              |
-| ------ | ---------------------------------------- |
-| 400    | Validation failed (missing/invalid data) |
-| 401    | Missing or invalid JWT                   |
-| 403    | Forbidden (e.g., feature disabled)       |
-| 404    | Resource not found                       |
-| 409    | Conflict (e.g., duplicate registration)  |
-| 500    | Server error                             |
+### Get Following
 
----
+- **Method:** `GET`
+- **Endpoint:** `/following/{userID}`
+- **Description:** Get list of users that the specified user is following
+- **Note:** Users can only view their own following list
+
+**Response:** `200 OK`
+
+```json
+[
+  {
+    "id": 5,
+    "username": "omarSbmc",
+    "profilePictureUrl": null
+  },
+  {
+    "id": 7,
+    "username": "remonKMC",
+    "profilePictureUrl": null
+  }
+]
+```
+
+**Error Responses:**
+
+| Status Code | Description           | Response Body                                            |
+| ----------- | --------------------- | -------------------------------------------------------- |
+| 401         | Unauthorized          | `{"error": "User not authenticated"}`                    |
+| 403         | Forbidden             | `{"error": "You can only view your own following list"}` |
+| 500         | Internal Server Error | `{"error": "Error message"}`                             |
+
+### Get Followers
+
+- **Method:** `GET`
+- **Endpoint:** `/followers/{userID}`
+- **Description:** Get list of users who follow the specified user
+
+**Response:** `200 OK`
+
+```json
+[
+  {
+    "id": 5,
+    "username": "omarSbmc",
+    "profilePictureUrl": null
+  },
+  {
+    "id": 7,
+    "username": "remonKMC",
+    "profilePictureUrl": null
+  }
+]
+```
+
+**Error Responses:**
+
+| Status Code | Description           | Response Body                         |
+| ----------- | --------------------- | ------------------------------------- |
+| 401         | Unauthorized          | `{"error": "User not authenticated"}` |
+| 404         | Not Found             | `{"error": "User not found"}`         |
+| 500         | Internal Server Error | `{"error": "Error message"}`          |
 
 ## Versioning & Changelog
 
