@@ -2,9 +2,7 @@ package com.example.demo.model.Posts;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 import com.example.demo.model.User;
 
@@ -39,7 +37,7 @@ public class Post {
     private List<PostComment> comments = new ArrayList<>();
 
     @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
-    private Set<PostLike> likes = new HashSet<>();
+    private List<PostLike> likes = new ArrayList<>();
 
     // Getters and Setters
     public Long getId() {
@@ -89,11 +87,11 @@ public class Post {
         this.comments = comments;
     }
 
-    public Set<PostLike> getLikes() {
+    public List<PostLike> getLikes() {
         return likes;
     }
 
-    public void setLikes(Set<PostLike> likes) {
+    public void setLikes(List<PostLike> likes) {
         this.likes = likes;
     }
 

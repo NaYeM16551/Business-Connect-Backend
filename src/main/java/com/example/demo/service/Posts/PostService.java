@@ -31,7 +31,6 @@ import com.example.demo.repository.Posts.PostCommentRepository; // Assuming you 
 import com.example.demo.repository.UserRepository; // Assuming you have a UserRepository to fetch user details
 
 @Service
-
 public class PostService {
 
     @Autowired
@@ -66,6 +65,7 @@ public class PostService {
 
         post = postRepo.save(post);
 
+        if(files == null || files.length == 0) return post.getId();
         for (MultipartFile file : files) {
             String url = cloudinaryService.uploadFile(file);
             System.out.println("Uploaded file URL: " + url);
@@ -75,12 +75,13 @@ public class PostService {
             media.setMediaType(file.getContentType()); // <-- Set mediaType!
             media.setPost(post);
 
-            mediaRepo.save(media);
+            post.getMedia().add(media);
         }
 
         return post.getId();
     }
-
+    
+    @Transactional
     public PostDto getPostsByPostId(Long postId) {
         Post post = postRepo.findByIdWithMedia(postId).orElse(null); // Standard method
         if (post == null) {
@@ -94,6 +95,9 @@ public class PostService {
         postDto.setId(post.getId());
         postDto.setContent(post.getContent());
         postDto.setCreatedAt(post.getCreatedAt());
+        postDto.setLikeCount((long) post.getLikes().size());
+        postDto.setShareCount(post.getShareCount());
+        postDto.setCommentCount((long) post.getComments().size());
         if (post.getMedia() != null) {
             List<PostMediaDto> mediaDtos = post.getMedia().stream()
                     .map(media -> {
@@ -158,6 +162,7 @@ public class PostService {
 
         // 3) For each media entry, delete its file from Cloudinary
         List<PostMedia> mediaList = post.getMedia();
+        post.getMedia().clear(); // Clear the in-memory list to avoid orphan removal issues
         for (PostMedia pm : mediaList) {
             String mediaUrl = pm.getMediaUrl();
             System.out.println("Deleting media from Cloudinary: " + mediaUrl);
@@ -176,7 +181,7 @@ public class PostService {
         // mapping,
         // you could simply do postRepo.delete(post) instead of
         // mediaRepo.deleteAll(...).
-        // But since we explicitly called mediaRepo.deleteAll(...), now just delete the
+        // But since we dont  explicitly called mediaRepo.deleteAll(...), now just delete the
         // post.
         postRepo.delete(post);
     }
@@ -187,14 +192,18 @@ public class PostService {
 
         PostLike like = postLikeRepo.findByPostIdAndUserId(postId, userId).orElse(null);
 
+        boolean flag = false;
+
         if (like == null) {
             like = new PostLike();
             like.setPost(post);
             like.setUser(userRepo.getReferenceById(userId)); // more robust than just new User().setId()
+            flag=true;
         }
         like.setLikeType(likeType);
         like.setLikedAt(LocalDateTime.now());
-        postLikeRepo.save(like); // save directly
+        if(flag)
+            post.getLikes().add(like); // add to post's likes collection
 
     }
 
@@ -230,10 +239,16 @@ public class PostService {
         // 4) If this is a reply, wire in the parent
         if (parent != null) {
             newComment.setParentComment(parent);
-            // (Because of mappedBy="parentComment", parent's replies list will be updated
-            // automatically
-            // when we save the child. No need to call parent.getReplies().add(...).)
+            // Add this new comment to the parent's replies collection
+            parent.getReplies().add(newComment);
+
+
         }
+
+        // if (parent != null) {
+        //     parent.getReplies().add(newComment);
+        //     postCommentRepo.save(parent);
+        // }
 
         // 5) Save only the new comment. JPA will cascade properly (if you’ve set
         // cascade on PostComment).
@@ -310,6 +325,8 @@ public class PostService {
         if (!comment.getUser().getId().equals(userId)) {
             throw new IllegalArgumentException("You are not allowed to delete this comment");
         }
+
+        comment.getReplies().size();
 
         // 4) Delete the comment. Because of cascade & orphanRemoval on 'replies',
         // any replies (children) of this comment will be deleted automatically.
@@ -456,7 +473,8 @@ public class PostService {
 
     @Transactional
     public void editComment(Long postId, Long commentId, Long userId, String newContent) {
-        // 1) Ensure the post exists. (We only need this check to guarantee the postId is valid.)
+        // 1) Ensure the post exists. (We only need this check to guarantee the postId
+        // is valid.)
         postRepo.findById(postId)
                 .orElseThrow(() -> new IllegalArgumentException("Post not found with id = " + postId));
 
@@ -470,7 +488,8 @@ public class PostService {
                     "Comment with id = " + commentId + " does not belong to post with id = " + postId);
         }
 
-        // 4) Verify that the currently authenticated user is indeed the author of the comment
+        // 4) Verify that the currently authenticated user is indeed the author of the
+        // comment
         if (!comment.getUser().getId().equals(userId)) {
             throw new IllegalArgumentException("You can only edit your own comments");
         }
@@ -483,14 +502,14 @@ public class PostService {
     }
 
     @Transactional
-    public Long sharePost(Long postId, Long userId,String shareContent) {
+    public Long sharePost(Long postId, Long userId, String shareContent) {
         // 1) Load the original post
         Post originalPost = postRepo.findById(postId)
-            .orElseThrow(() -> new IllegalArgumentException("Post not found"));
+                .orElseThrow(() -> new IllegalArgumentException("Post not found"));
 
         // 2) Load the user who is doing the share
         User sharingUser = userRepo.findById(userId)
-            .orElseThrow(() -> new IllegalArgumentException("User not found"));
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
         // 3) Create a new Post entity representing the "shared" post
         Post sharedPost = new Post();
@@ -501,17 +520,15 @@ public class PostService {
 
         // Set the timestamp for when the share happened
         sharedPost.setCreatedAt(LocalDateTime.now());
-        
+
         boolean originalParentExist = originalPost.getParentPostId() != null && originalPost.getParentPostId() != -1;
 
-        if(originalParentExist)
-        {
+        if (originalParentExist) {
             Post originalParentPost = postRepo.findById(originalPost.getParentPostId())
-                .orElseThrow(() -> new IllegalArgumentException("Original parent post not found"));
+                    .orElseThrow(() -> new IllegalArgumentException("Original parent post not found"));
             originalParentPost.incrementShareCount();
-            postRepo.save(originalParentPost);    
-            
-                
+            postRepo.save(originalParentPost);
+
         }
         // Mark this new post as a “child” of the original
         sharedPost.setParentPostId(originalParentExist ? originalPost.getParentPostId() : originalPost.getId());
@@ -528,6 +545,5 @@ public class PostService {
 
         return sharedPost.getId();
     }
-    
 
 }

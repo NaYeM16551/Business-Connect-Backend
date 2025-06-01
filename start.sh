@@ -1,1 +1,1 @@
-mvn -q spring-boot:run
+mvn -q spring-boot:run -Dspring-boot.run.jvmArguments="-ea"
