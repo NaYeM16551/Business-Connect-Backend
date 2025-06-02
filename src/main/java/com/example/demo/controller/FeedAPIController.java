@@ -1,18 +1,26 @@
 package com.example.demo.controller;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.dto.Feed.CursorDto;
 import com.example.demo.dto.Feed.FeedItemDto;
 import com.example.demo.dto.Feed.FeedPageResponseDto;
-
-import java.time.Duration;
-import java.util.*;
 
 @RestController
 @RequestMapping("/api/v1/feed")
@@ -20,10 +28,13 @@ public class FeedAPIController {
 
     private final StringRedisTemplate redis;
 
+    // How many candidates to retrieve from Redis by timestamp, before dynamic
+    // re‐scoring
+    private static final int CANDIDATE_POOL_SIZE = 100;
+
     @Autowired
     public FeedAPIController(StringRedisTemplate redis) {
         this.redis = redis;
-
     }
 
     private static Long safeLong(Object val) {
@@ -35,7 +46,7 @@ public class FeedAPIController {
         try {
             return Long.valueOf(s);
         } catch (NumberFormatException ex) {
-            return 0L; // or throw if you want
+            return 0L;
         }
     }
 
@@ -44,94 +55,169 @@ public class FeedAPIController {
      *
      * Returns a page of feed items for the currently authenticated user.
      *
-     * @param authHeader   “Authorization: Bearer <JWT_TOKEN>”
-     * @param cursorScore  Optional: the last page’s lowest score (for pagination)
-     * @param cursorPostId Optional: the last page’s post ID (break ties)
-     * @param limit        How many items to return (default = 20)
+     * 1) Fetch a pool of recent posts by *raw timestamp*.
+     * 2) Compute a dynamic “rankScore” in‐Java.
+     * 3) Sort by (rankScore DESC, postId DESC).
+     * 4) Apply dynamic cursor & limit in‐memory.
+     * 5) Return result + nextCursor.
      */
     @GetMapping
     public ResponseEntity<FeedPageResponseDto> getFeed(
-            @RequestParam(value = "cursorScore", required = false) Long cursorScore,
+            @RequestParam(value = "cursorScore", required = false) Double cursorScore, // dynamic‐score cursor
             @RequestParam(value = "cursorPostId", required = false) Long cursorPostId,
             @RequestParam(value = "limit", defaultValue = "20") int limit,
-            Authentication authentication
+            Authentication authentication) {
 
-    ) {
-        // With Spring Security, principal is guaranteed non-null (unless endpoint is
-        // not secured).
         Long userId = Long.valueOf(authentication.getName());
-        // —————————————————————————————
-        // 2) Check for a cached JSON page in Redis
-        // —————————————————————————————
-        // Construct a unique key:
-        // “feed_json:user:<userId>:<cursorScore>:<cursorPostId>:<limit>”
-        String cScore = (cursorScore == null ? "start" : cursorScore.toString());
-        String cPid = (cursorPostId == null ? "start" : cursorPostId.toString());
-        String cacheKey = String.format("feed_json:user:%d:%s:%s:%d",
-                userId, cScore, cPid, limit);
+        String cacheKey = buildCacheKey(userId, cursorScore, cursorPostId, limit);
 
-        String cachedJson = redis.opsForValue().get(cacheKey);
-        if (cachedJson != null) {
-            // If we have a cached JSON response, convert it back to our DTO and return
-            // immediately
-            FeedPageResponseDto cachedPage = FeedPageResponseDto.fromJson(cachedJson);
+        // 1) Try cached page
+        FeedPageResponseDto cachedPage = getCachedFeedPage(cacheKey);
+        if (cachedPage != null) {
             return ResponseEntity.ok(cachedPage);
         }
+        System.out.println("Cache miss for key: " + cacheKey);
 
-        // —————————————————————————————
-        // 3) Read from the user’s sorted set: “feed:user:<userId>”
-        // —————————————————————————————
+        // 2) Fetch a pool of candidates by *raw timestamp* (desc)
         String zsetKey = "feed:user:" + userId;
-        Set<String> postIdStrings;
+        Set<String> candidateIds = getFeedPostIds(zsetKey, CANDIDATE_POOL_SIZE);
 
-        if (cursorScore == null || cursorPostId == null) {
-            // First page: get the top N items (highest scores first)
-            postIdStrings = redis.opsForZSet().reverseRange(zsetKey, 0, limit - 1);
-        } else {
-            // Paginated request: get items with score < cursorScore
-            //
-            // NOTE: This is a simplified approach assuming “score” (timestamp ms) rarely
-            // ties.
-            // If tie-breaking is required, you might store a composite score (e.g.
-            // timestamp * 1e6 + postId).
-            double maxScore = cursorScore - 1; // strictly less than the last page’s last score
-            postIdStrings = redis.opsForZSet()
-                    .reverseRangeByScore(zsetKey, maxScore, 0, 0, limit);
+        // 3) Build DTOs + compute a dynamic score for each
+        List<FeedItemDto> scoredItems = buildFeedItemsWithDynamicScore(candidateIds, userId);
+
+        // 4) Sort by (rankScore DESC, postId DESC)
+        scoredItems.sort(
+                Comparator.comparing(FeedItemDto::getRankScore, Comparator.reverseOrder())
+                        .thenComparing(FeedItemDto::getPostId, Comparator.reverseOrder()));
+
+        // 5) Apply USER’S dynamic cursor entirely in memory
+        List<FeedItemDto> pageItems = applyCursorAndLimit(scoredItems, cursorScore, cursorPostId, limit);
+
+        // 6) Build nextCursor from the last item we returned
+        CursorDto nextCursor = buildNextCursor(pageItems);
+
+        FeedPageResponseDto page = new FeedPageResponseDto(pageItems, nextCursor);
+
+        // 7) Cache it for a short TTL
+        cacheFeedPage(cacheKey, page);
+
+        return ResponseEntity.ok(page);
+    }
+
+    // ———————————————————————————————
+    // 1) CACHE KEY & CACHE HELPERS
+    // ———————————————————————————————
+    private String buildCacheKey(Long userId, Double cursorScore, Long cursorPostId, int limit) {
+        String cScore = (cursorScore == null ? "start" : String.valueOf(cursorScore));
+        String cPid = (cursorPostId == null ? "start" : cursorPostId.toString());
+        return String.format("feed_json:user:%d:%s:%s:%d", userId, cScore, cPid, limit);
+    }
+
+    private FeedPageResponseDto getCachedFeedPage(String cacheKey) {
+        String cachedJson = redis.opsForValue().get(cacheKey);
+        if (cachedJson != null) {
+            return FeedPageResponseDto.fromJson(cachedJson);
         }
+        return null;
+    }
 
+    private void cacheFeedPage(String cacheKey, FeedPageResponseDto page) {
+        redis.opsForValue().set(cacheKey, page.toJson(), Duration.ofSeconds(15));
+    }
+
+    // ———————————————————————————————
+    // 2) CANDIDATE FETCH BY RAW TIMESTAMP
+    // ———————————————————————————————
+    /**
+     * Always fetch up to `candidatePoolSize` post IDs, sorted by raw timestamp
+     * descending.
+     * We store each post's createdAt epoch‐ms as the ZSET score.
+     */
+    private Set<String> getFeedPostIds(String zsetKey, int candidatePoolSize) {
+        Set<String> postIdStrings = redis.opsForZSet().reverseRange(zsetKey, 0, candidatePoolSize - 1);
         if (postIdStrings == null) {
-            postIdStrings = Collections.emptySet();
+            return Collections.emptySet();
         }
+        return postIdStrings;
+    }
 
-        // —————————————————————————————
-        // 4) For each postId, fetch its Hash (“post:<postId>”) for details
-        // —————————————————————————————
+    // ———————————————————————————————
+    // 3) BUILD DTOs WITH DYNAMIC SCORE
+    // ———————————————————————————————
+    /**
+     * For each postId in the candidate pool:
+     * 1) Fetch hash fields: createdAt, likeCount, commentCount, shareCount,
+     * mediaUrls
+     * 2) Compute recencyScore = exp(-hoursAgo/24)
+     * 3) Compute engagementScore = log(1 + likeCount) + 0.5*log(1 + commentCount) +
+     * 0.8*log(1 + shareCount)
+     * 4) Compute mediaBoost = 0.1 if hasMedia else 0.0
+     * 5) finalScore = 0.6*recencyScore + 0.3*engagementScore + mediaBoost
+     */
+    private List<FeedItemDto> buildFeedItemsWithDynamicScore(Set<String> postIdStrings, Long userId) {
+        long nowMs = System.currentTimeMillis();
         List<FeedItemDto> items = new ArrayList<>();
-        long lastScoreVal = 0L;
-        long lastPostIdVal = 0L;
 
         for (String pidStr : postIdStrings) {
-            Long pid = Long.valueOf(pidStr);
-            String postKey = "post:" + pid;
+            Long pid;
+            try {
+                pid = Long.valueOf(pidStr);
+            } catch (NumberFormatException ex) {
+                continue; // skip invalid
+            }
 
-            // Get all fields from the Redis Hash
+            String postKey = "post:" + pid;
             Map<Object, Object> postHash = redis.opsForHash().entries(postKey);
-            if (postHash.isEmpty() || postHash == null) {
-                // If the hash expired or was never set, skip
+            if (postHash == null || postHash.isEmpty()) {
                 continue;
             }
 
-            // Build a DTO for each feed item
+            // 1) Extract fields
+            String createdAtStr = (String) postHash.get("createdAt");
+            long createdAtMs;
+            try {
+                createdAtMs = Instant.parse(createdAtStr).toEpochMilli();
+            } catch (Exception e) {
+                continue; // skip if unparsable
+            }
+
+            long likeCount = safeLong(postHash.get("likeCount"));
+            long commentCount = safeLong(postHash.get("commentCount"));
+            long shareCount = safeLong(postHash.get("shareCount"));
+
+            String mediaCsv = (String) postHash.get("mediaUrls");
+            boolean hasMedia = (mediaCsv != null && !mediaCsv.isBlank());
+
+            // 2) Compute recencyScore = exp(-hoursAgo/24)
+            double hoursAgo = (nowMs - createdAtMs) / 3_600_000.0;
+            double recencyScore = Math.exp(-hoursAgo / 24.0);
+
+            // 3) Compute engagementScore
+            double engagementScore = Math.log(1 + likeCount)
+                    + 0.5 * Math.log(1 + commentCount)
+                    + 0.8 * Math.log(1 + shareCount);
+
+            // 4) mediaBoost
+            double mediaBoost = hasMedia ? 0.1 : 0.0;
+
+            // 5) finalScore
+            double finalScore = 0.6 * recencyScore + 0.3 * engagementScore + mediaBoost;
+
+            System.out.printf(" userId %d:,Post %d: , finalScore=%.4f%n",
+                    userId, pid, finalScore);
+
+            // 6) Build the DTO and set rankScore
             FeedItemDto dto = new FeedItemDto();
             dto.setPostId(pid);
+            dto.setRankScore(finalScore);
+
+            // 7) Populate the rest of dto from hash
             dto.setAuthorId(Long.valueOf((String) postHash.get("authorId")));
             dto.setAuthorName((String) postHash.get("authorName"));
             dto.setAuthorAvatarUrl((String) postHash.get("authorAvatarUrl"));
             dto.setContentSnippet((String) postHash.get("content"));
-            dto.setCreatedAt((String) postHash.get("createdAt"));
+            dto.setCreatedAt(createdAtStr);
 
-            // Deserialize mediaUrls (CSV) into a List<String>
-            String mediaCsv = (String) postHash.get("mediaUrls");
             List<String> mediaList;
             if (mediaCsv == null || mediaCsv.isEmpty()) {
                 mediaList = List.of();
@@ -140,58 +226,83 @@ public class FeedAPIController {
             }
             dto.setMediaUrls(mediaList);
 
-            // Populate counts
-            dto.setLikeCount(safeLong(postHash.get("likeCount")));
-            dto.setCommentCount(safeLong(postHash.get("commentCount")));
-            dto.setShareCount(safeLong(postHash.get("shareCount")));
+            dto.setLikeCount(likeCount);
+            dto.setCommentCount(commentCount);
+            dto.setShareCount(shareCount);
 
-            // Fetch the “score” from the ZSET (the timestamp or rank)
-            Double scoreDbl = redis.opsForZSet().score(zsetKey, pidStr);
-            dto.setRankScore(scoreDbl == null ? 0.0 : scoreDbl);
-
-            // 3) Now fetch this user’s reaction from the “likes” hash
+            // 8) Fetch this user’s reaction from post:<pid>:likes
             String likeHashKey = "post:" + pid + ":likes";
             Object likeTypeObj = redis.opsForHash().get(likeHashKey, userId.toString());
             if (likeTypeObj != null) {
                 dto.setMyLikeType(Long.parseLong((String) likeTypeObj));
             } else {
-                dto.setMyLikeType(0L); // 0 = no-react
+                dto.setMyLikeType(0L);
             }
 
-            // Initially, mark like/share flags as false; a real app would check if
-            // this user has liked/shared this post, perhaps via another Redis set or DB.
             dto.setIsSharedByMe(false);
-
             items.add(dto);
+        }
 
-            // Track the last item’s score & postId for “nextCursor”
-            if (scoreDbl != null) {
-                lastScoreVal = scoreDbl.longValue();
-                lastPostIdVal = pid;
+        return items;
+    }
+
+    // ———————————————————————————————
+    // 4) APPLY DYNAMIC CURSOR & LIMIT IN MEMORY
+    // ———————————————————————————————
+    /**
+     * Given a sorted list of FeedItemDto (by DESC rankScore, then DESC postId),
+     * apply cursor‐based pagination:
+     *
+     * • If no cursor, take first `limit` items.
+     * • If cursor is provided, skip all items where
+     * (dto.getRankScore() > cursorScore) OR
+     * (dto.getRankScore() == cursorScore AND dto.getPostId() >= cursorPostId).
+     * Then take up to `limit` from the remainder.
+     */
+    private List<FeedItemDto> applyCursorAndLimit(
+            List<FeedItemDto> sortedItems,
+            Double cursorScore,
+            Long cursorPostId,
+            int limit) {
+
+        List<FeedItemDto> page = new ArrayList<>(limit);
+        int count = 0;
+
+        for (FeedItemDto dto : sortedItems) {
+            double score = dto.getRankScore();
+            long pid = dto.getPostId();
+
+            // If we have a cursor, skip until we find items strictly "after" the cursor
+            if (cursorScore != null && cursorPostId != null) {
+                if (score >= cursorScore || pid == cursorPostId) {
+                    // Still equal or “above” the cursor: skip
+                    continue;
+                } else if (score == cursorScore && pid >= cursorPostId) {
+                    // Tie on score but postId is not strictly less: skip
+                    continue;
+                }
+                // If we reach here: either score < cursorScore, or (score == cursorScore && pid
+                // < cursorPostId)
             }
+
+            page.add(dto);
+            count++;
+            if (count >= limit)
+                break;
         }
 
-        // —————————————————————————————
-        // 5) Build the next‐page cursor (if we have at least one item)
-        // —————————————————————————————
-        CursorDto nextCursor = null;
+        return page;
+    }
+
+    // ———————————————————————————————
+    // 5) BUILD NEXT CURSOR FROM LAST ITEM
+    // ———————————————————————————————
+    private CursorDto buildNextCursor(List<FeedItemDto> items) {
         if (!items.isEmpty()) {
-            // The last item in our “items” list is the lowest‐scored of this page.
             FeedItemDto lastItem = items.get(items.size() - 1);
-            nextCursor = new CursorDto(lastItem.getRankScore().longValue(),
-                    lastItem.getPostId());
+            // Keep it as a Double
+            return new CursorDto(lastItem.getRankScore() - 0.01, lastItem.getPostId());
         }
-
-        FeedPageResponseDto page = new FeedPageResponseDto(items, nextCursor);
-
-        // —————————————————————————————
-        // 6) Cache the JSON for this page under
-        // “feed_json:user:<userId>:<cursor>:<limit>”
-        // with a short TTL(15 sec) so repeated scrolls don’t hammer Redis.
-        // —————————————————————————————
-        redis.opsForValue().set(cacheKey, page.toJson(), Duration.ofSeconds(15));
-
-        // Return the constructed page
-        return ResponseEntity.ok(page);
+        return null;
     }
 }

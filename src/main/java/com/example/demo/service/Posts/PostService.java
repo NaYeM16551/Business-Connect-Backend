@@ -105,28 +105,7 @@ public class PostService {
                 post.getMedia().add(media);
             }
         }
-
-        // 4) Build a short “snippet” (first 200 chars) for the feed display
-        String snippet = content.length() <= 200
-                ? content
-                : content.substring(0, 200);
-
-        // 5) Convert LocalDateTime to Instant (UTC), needed for Redis scoring
-        Instant createdInstant = post.getCreatedAt()
-                .atZone(ZoneOffset.systemDefault())
-                .toInstant();
-
-        PostCreatedEventDto eventDto = new PostCreatedEventDto(
-                post.getId(),
-                userId,
-                createdInstant,
-                snippet,
-                post.getMedia().stream()
-                        .map(PostMedia::getMediaUrl)
-                        .toList());
-        // 6) Publish the event to notify other components (e.g., Redis, search index)
-        System.out.println("Publishing PostCreatedEvent for post ID: " + post.getId());
-        eventPublisher.publishEvent(eventDto);
+        triggerEventListerner(post);
         return post.getId();
     }
 
@@ -719,6 +698,32 @@ public class PostService {
     }
 
     @Transactional
+    public void triggerEventListerner(Post post)
+    {
+        // 1) Convert LocalDateTime to Instant (UTC), needed for Redis scoring
+        Instant createdInstant = post.getCreatedAt()
+                .atZone(ZoneOffset.systemDefault())
+                .toInstant();
+
+        String snippet = post.getContent().length() <= 200
+                ? post.getContent()
+                : post.getContent().substring(0, 200);
+
+        PostCreatedEventDto eventDto = new PostCreatedEventDto(
+                post.getId(),
+                post.getUser().getId(),
+                createdInstant,
+                snippet,
+                post.getMedia().stream()
+                        .map(PostMedia::getMediaUrl)
+                        .toList());
+
+        // 2) Publish the event to notify other components (e.g., Redis, search index)
+        System.out.println("Publishing PostCreatedEvent for post ID: " + post.getId());
+        eventPublisher.publishEvent(eventDto);
+    }
+
+    @Transactional
     public Long sharePost(Long postId, Long userId, String shareContent) {
         // 1) Load the original post
         Post originalPost = postRepo.findById(postId)
@@ -763,7 +768,11 @@ public class PostService {
         String postKey = "post:" + postId;
         redisTemplate.opsForHash().increment(postKey, "shareCount", 1);
 
-        updatePostCache(sharedPost); // Update Redis cache for the new shared post
+        // 6) Optionally set a TTL so old posts auto‐expire:
+        redisTemplate.expire(postKey, Duration.ofDays(7));
+
+        // 7) Trigger the event listener to update feeds and caches
+        triggerEventListerner(sharedPost); // This will publish the PostCreatedEvent
 
         return sharedPost.getId();
     }

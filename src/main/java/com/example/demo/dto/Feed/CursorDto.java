@@ -5,19 +5,19 @@ package com.example.demo.dto.Feed;
  *  - postId:    the ID of that last item, used as a tie-breaker if two posts share the same score
  */
 public class CursorDto {
-    private Long rankScore;
+    private double rankScore;
     private Long postId;
 
     // Default no-arg constructor (needed for JSON deserialization)
     public CursorDto() { }
 
-    public CursorDto(Long rankScore, Long postId) {
+    public CursorDto(double rankScore, Long postId) {
         this.rankScore = rankScore;
         this.postId    = postId;
     }
 
     // ————— Getters & Setters —————
-    public Long getRankScore() { return rankScore; }
+    public double getRankScore() { return rankScore; }
     public void setRankScore(Long rankScore) { this.rankScore = rankScore; }
 
     public Long getPostId() { return postId; }

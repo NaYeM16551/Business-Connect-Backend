@@ -1,26 +1,27 @@
 package com.example.demo.service.feed;
 
-import com.example.demo.dto.Posts.PostCreatedEventDto;
-import com.example.demo.model.User;
-import com.example.demo.repository.UserRepository;
-import com.example.demo.repository.Follow_Unfollow.FollowUnfollowRepository;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
-import java.util.Objects;
 
-import java.time.Duration;
-import java.util.List;
-import java.util.stream.Collectors;
-
+import com.example.demo.dto.Posts.PostCreatedEventDto;
+import com.example.demo.model.User;
+import com.example.demo.repository.UserRepository;
+import com.example.demo.repository.Follow_Unfollow.FollowUnfollowRepository;
 
 @Service
 public class FeedOrchestratorService {
 
     private final FollowUnfollowRepository followRepo; // JPA repo for “Follow” entity
-    private final StringRedisTemplate redis; // For ZADD, ZRANGE, HMSET, etc.
-    private final UserRepository userRepo; // To fetch author details for denormalization
+    private final StringRedisTemplate redis; // For ZADD, HMSET, etc.
+    private final UserRepository userRepo; // To fetch author details
 
     @Autowired
     public FeedOrchestratorService(FollowUnfollowRepository followRepo,
@@ -32,107 +33,74 @@ public class FeedOrchestratorService {
     }
 
     /**
-     * Listens for any PostCreatedEvent and “fans out” to each follower:
-     * 1) Adds the post ID into each follower’s ZSET (feed:user:{followerId}),
-     * using the post’s timestamp‐based score.
-     * 2) Stores a Redis Hash “post:{postId}” containing minimal post details
-     * (authorName, snippet, mediaUrls, counts).
+     * Listens for any PostCreatedEvent (either a brand‐new post or a share) and
+     * “fans out”:
      *
-     * If a single author has thousands of followers, this loop can be large.
-     * In that case, you might use a “celebrity” fallback (not shown here).
+     * 1) Writes/updates the Redis Hash "post:{postId}" exactly once per event.
+     * 2) Adds the postId into each follower’s ZSET “feed:user:{followerId}” with a
+     * score = nowMs.
+     * This way, even if the original creation was days ago, a share pushes it to
+     * “now.”
      */
     @EventListener
     public void onPostCreated(PostCreatedEventDto event) {
-        System.out.println("Received PostCreatedEvent: " + event);
         Long postId = event.getPostId();
         Long authorId = event.getAuthorId();
-        Long score = event.getCreatedAt().toEpochMilli(); // numeric score for ZSET
-        String snippet = event.getContentSnippet();
-        List<String> mediaUrls = event.getMediaUrls();
+        if (postId == null || authorId == null) {
+            return;
+        }
 
-        // 1) Fetch author details (e.g. username, avatarUrl) to include in the Redis
-        // Hash
+        // 1) Fetch author details once
         User author = userRepo.findById(authorId)
                 .orElseThrow(() -> new IllegalArgumentException("Author not found"));
         String authorName = author.getUsername();
-        String authorAvatar = author.getProfilePictureUrl(); // assume User has a getProfilePictureUrl()
+        String authorAvatar = author.getProfilePictureUrl();
 
-        // 2) Get all follower IDs for this author from PostgreSQL
-        // This runs a query like: SELECT f.follower.id FROM Follow f WHERE
-        // f.followee.id = :authorId
-        List<Long> followerIds = followRepo.findFollowerIdsByFolloweeId(authorId);
-
-        // 3) For each follower, add the post ID into their personal feed sorted set
-        //
-        // ZADD feed:user:<followerId> <score> <postId>
-        // We use the numeric score = epoch milliseconds so newer posts appear first in
-        // ZREVRANGE.
-        for (Long followerId : followerIds) {
-            // 1) Key checks that should never really happen:
-            if (followerId == null || postId == null || authorId == null) {
-                // If any of these core IDs really is null, skip this follower instead of
-                // throwing:
-                continue;
-            }
-            if (score == null) {
-                // If score is null, we cannot ZADD. Skip this follower too:
-                continue;
-            }
-
-            // ————————————
-            // 2) Add to the follower’s sorted set:
-            // ZADD feed:user:<followerId> <score> <postId>
-            String zsetKey = "feed:user:" + followerId;
-            redis.opsForZSet().add(zsetKey, postId.toString(), score);
-
-            // ————————————
-            // 3) Build (or refresh) the Redis Hash for this post’s details:
-            String postKey = "post:" + postId;
-            // authorId is never null here:
-            redis.opsForHash().put(postKey, "authorId", authorId.toString());
-
-            // authorName might be null: store empty string if so
-            String safeAuthorName = (authorName == null ? "" : authorName);
-            redis.opsForHash().put(postKey, "authorName", safeAuthorName);
-
-            // authorAvatarUrl might be null: store empty string if so
-            String safeAvatar = (authorAvatar == null ? "" : authorAvatar);
-            redis.opsForHash().put(postKey, "authorAvatarUrl", safeAvatar);
-
-            // snippet (content snippet) might be null: store empty string if so
-            String safeSnippet = (snippet == null ? "" : snippet);
-            redis.opsForHash().put(postKey, "content", safeSnippet);
-
-            // createdAt should never be null (you build it from post.getCreatedAt()), but
-            // just in case:
-            String createdAtStr = (event.getCreatedAt() == null
-                    ? ""
-                    : event.getCreatedAt().toString());
-            redis.opsForHash().put(postKey, "createdAt", createdAtStr);
-
-            // mediaUrls might be null or empty → represent as empty CSV string
-            String csvMedia;
-            if (mediaUrls == null || mediaUrls.isEmpty()) {
-                csvMedia = "";
-            } else {
-                // If any element inside mediaUrls is null, filter it out first:
-
-                List<String> safeList = mediaUrls.stream()
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toList());
-                csvMedia = String.join(",", safeList);
-            }
-            redis.opsForHash().put(postKey, "mediaUrls", csvMedia);
-
-            // Initialize the counts (always strings)
-            redis.opsForHash().put(postKey, "likeCount", "0");
-            redis.opsForHash().put(postKey, "commentCount", "0");
-            redis.opsForHash().put(postKey, "shareCount", "0");
-
-            // 4) Optionally set a TTL so old posts auto‐expire:
-            redis.expire(postKey, Duration.ofDays(7));
+        // 2) Build the single Redis Hash for this post (overwrite / upsert)
+        String postKey = "post:" + postId;
+        // authorId
+        redis.opsForHash().put(postKey, "authorId", authorId.toString());
+        // authorName (store empty string if null)
+        redis.opsForHash().put(postKey, "authorName", authorName == null ? "" : authorName);
+        // authorAvatarUrl (store empty string if null)
+        redis.opsForHash().put(postKey, "authorAvatarUrl", authorAvatar == null ? "" : authorAvatar);
+        // snippet (content)
+        String snippet = event.getContentSnippet();
+        redis.opsForHash().put(postKey, "content", snippet == null ? "" : snippet);
+        // createdAt: keep the original creation time for recency‐decay in the API
+        Instant createdAt = event.getCreatedAt();
+        String createdAtStr = (createdAt == null ? "" : createdAt.toString());
+        redis.opsForHash().put(postKey, "createdAt", createdAtStr);
+        // mediaUrls as CSV
+        List<String> mediaUrls = event.getMediaUrls();
+        String csvMedia = "";
+        if (mediaUrls != null && !mediaUrls.isEmpty()) {
+            csvMedia = mediaUrls.stream()
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.joining(","));
         }
+        redis.opsForHash().put(postKey, "mediaUrls", csvMedia);
+        // initialize counts to zero if missing (upsert)
+        redis.opsForHash().putIfAbsent(postKey, "likeCount", "0");
+        redis.opsForHash().putIfAbsent(postKey, "commentCount", "0");
+        redis.opsForHash().putIfAbsent(postKey, "shareCount", "0");
+        // optional TTL
+        redis.expire(postKey, Duration.ofDays(7));
 
-        System.out.println("Post fan-out completed for postId: " + postId);
+        // 3) Now fan out to each follower’s sorted set
+        // Use post creation time as the score for new posts (recency/decay)
+        long score = createdAt != null ? createdAt.toEpochMilli() : System.currentTimeMillis();
+        List<Long> followerIds = followRepo.findFollowerIdsByFolloweeId(authorId);
+        // If you want the author to see their own post too, uncomment the next line:
+        followerIds.add(authorId);
+
+        for (Long followerId : followerIds) {
+            if (followerId == null)
+                continue;
+            String zsetKey = "feed:user:" + followerId;
+            // ZADD feed:user:{followerId} {score} {postId}
+            redis.opsForZSet().add(zsetKey, postId.toString(), score);
+            System.out.println("Added post " + postId + " to follower " + followerId + "'s feed at score " + score);
+        }
     }
 }
