@@ -2,33 +2,39 @@ package com.example.demo.service.Posts;
 
 import java.io.IOException;
 import java.security.Principal;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher; // For publishing events
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import java.util.Iterator;
 
 import com.example.demo.dto.Posts.CommentResponseDto;
+import com.example.demo.dto.Posts.PostCreatedEventDto;
 import com.example.demo.dto.Posts.PostDto;
 import com.example.demo.dto.Posts.PostMediaDto;
 import com.example.demo.model.User;
 import com.example.demo.model.Posts.Post;
-import com.example.demo.model.Posts.PostMedia;
-import com.example.demo.model.Posts.PostLike;
 import com.example.demo.model.Posts.PostComment;
-
+import com.example.demo.model.Posts.PostLike;
+import com.example.demo.model.Posts.PostMedia;
+import com.example.demo.repository.UserRepository; // Assuming you have a UserRepository to fetch user details
+import com.example.demo.repository.Posts.PostCommentRepository; // Assuming you have a PostCommentRepository
+import com.example.demo.repository.Posts.PostLikeRepository;
 import com.example.demo.repository.Posts.PostMediaRepository;
 import com.example.demo.repository.Posts.PostRepository;
 import com.example.demo.service.CloudinaryService;
-
-import com.example.demo.repository.Posts.PostLikeRepository;
-
-import com.example.demo.repository.Posts.PostCommentRepository; // Assuming you have a PostCommentRepository
-import com.example.demo.repository.UserRepository; // Assuming you have a UserRepository to fetch user details
 
 @Service
 public class PostService {
@@ -49,6 +55,27 @@ public class PostService {
     @Autowired
     private PostCommentRepository postCommentRepo; // Assuming you have a PostCommentRepository
 
+    @Autowired
+    private ApplicationEventPublisher eventPublisher; // For publishing events
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
+    // redis template is used for caching posts and their metadata
+    private void updatePostCache(Post post) {
+        String postKey = "post:" + post.getId();
+        redisTemplate.opsForHash().put(postKey, "content", post.getContent());
+        redisTemplate.opsForHash().put(postKey, "createdAt", post.getCreatedAt().toString());
+        redisTemplate.opsForHash().put(postKey, "likeCount", String.valueOf(post.getLikes().size()));
+        redisTemplate.opsForHash().put(postKey, "commentCount", String.valueOf(post.getComments().size()));
+        redisTemplate.opsForHash().put(postKey, "shareCount", String.valueOf(post.getShareCount()));
+        if (post.getMedia() != null && !post.getMedia().isEmpty()) {
+            redisTemplate.opsForHash().put(postKey, "mediaUrls",
+                    post.getMedia().stream().map(PostMedia::getMediaUrl).collect(Collectors.joining(",")));
+        }
+        redisTemplate.expire(postKey, Duration.ofDays(7));
+    }
+
     @Transactional
     public Long createPost(String content, MultipartFile[] files, Principal principal) throws IOException {
         Long userId = Long.valueOf(principal.getName());
@@ -65,22 +92,44 @@ public class PostService {
 
         post = postRepo.save(post);
 
-        if(files == null || files.length == 0) return post.getId();
-        for (MultipartFile file : files) {
-            String url = cloudinaryService.uploadFile(file);
-            System.out.println("Uploaded file URL: " + url);
+        if (files != null && files.length > 0) {
+            for (MultipartFile file : files) {
+                String url = cloudinaryService.uploadFile(file);
+                System.out.println("Uploaded file URL: " + url);
 
-            PostMedia media = new PostMedia();
-            media.setMediaUrl(url);
-            media.setMediaType(file.getContentType()); // <-- Set mediaType!
-            media.setPost(post);
+                PostMedia media = new PostMedia();
+                media.setMediaUrl(url);
+                media.setMediaType(file.getContentType()); // <-- Set mediaType!
+                media.setPost(post);
 
-            post.getMedia().add(media);
+                post.getMedia().add(media);
+            }
         }
 
+        // 4) Build a short “snippet” (first 200 chars) for the feed display
+        String snippet = content.length() <= 200
+                ? content
+                : content.substring(0, 200);
+
+        // 5) Convert LocalDateTime to Instant (UTC), needed for Redis scoring
+        Instant createdInstant = post.getCreatedAt()
+                .atZone(ZoneOffset.systemDefault())
+                .toInstant();
+
+        PostCreatedEventDto eventDto = new PostCreatedEventDto(
+                post.getId(),
+                userId,
+                createdInstant,
+                snippet,
+                post.getMedia().stream()
+                        .map(PostMedia::getMediaUrl)
+                        .toList());
+        // 6) Publish the event to notify other components (e.g., Redis, search index)
+        System.out.println("Publishing PostCreatedEvent for post ID: " + post.getId());
+        eventPublisher.publishEvent(eventDto);
         return post.getId();
     }
-    
+
     @Transactional
     public PostDto getPostsByPostId(Long postId) {
         Post post = postRepo.findByIdWithMedia(postId).orElse(null); // Standard method
@@ -88,29 +137,71 @@ public class PostService {
             throw new RuntimeException("Post not found");
         }
 
-        // System.out.println("Post found: " + post.getId() + ", Content: " +
-        // post.getCreatedAt());
+        // Check Redis cache first
+        String postKey = "post:" + postId;
+        Map<Object, Object> cached = redisTemplate.opsForHash().entries(postKey);
 
-        PostDto postDto = new PostDto();
-        postDto.setId(post.getId());
-        postDto.setContent(post.getContent());
-        postDto.setCreatedAt(post.getCreatedAt());
-        postDto.setLikeCount((long) post.getLikes().size());
-        postDto.setShareCount(post.getShareCount());
-        postDto.setCommentCount((long) post.getComments().size());
-        if (post.getMedia() != null) {
-            List<PostMediaDto> mediaDtos = post.getMedia().stream()
-                    .map(media -> {
-                        PostMediaDto mediaDto = new PostMediaDto();
-                        mediaDto.setMediaUrl(media.getMediaUrl());
-                        mediaDto.setMediaType(media.getMediaType());
-                        return mediaDto;
-                    })
-                    .toList();
-            postDto.setMedia(mediaDtos);
-        } else {
-            postDto.setMedia(Collections.emptyList());
+        if (cached != null && !cached.isEmpty()) {
+            // Build DTO from Redis hash
+            PostDto postDto = new PostDto();
+            postDto.setId(postId);
+            postDto.setContent((String) cached.get("content"));
+            postDto.setCreatedAt(LocalDateTime.parse((String) cached.get("createdAt")));
+            postDto.setLikeCount(Long.parseLong((String) cached.getOrDefault("likeCount", "0")));
+            postDto.setCommentCount(Long.parseLong((String) cached.getOrDefault("commentCount", "0")));
+            postDto.setShareCount(Long.parseLong((String) cached.getOrDefault("shareCount", "0")));
+
+            // Handle mediaUrls
+            String mediaCsv = (String) cached.get("mediaUrls");
+            if (mediaCsv != null && !mediaCsv.isEmpty()) {
+                List<PostMediaDto> media = Arrays.stream(mediaCsv.split(","))
+                        .map(url -> {
+                            PostMediaDto m = new PostMediaDto();
+                            m.setMediaUrl(url);
+                            m.setMediaType(""); // If needed, fetch from DB or cache as well
+                            return m;
+                        })
+                        .toList();
+                postDto.setMedia(media);
+            } else {
+                postDto.setMedia(Collections.emptyList());
+            }
+
+            System.out.println("Post fetched from Redis cache: " + postKey);
+            return postDto;
         }
+
+        PostDto postDto = convertToDto(post);
+
+        // postDto.setContent(post.getContent());
+        // postDto.setCreatedAt(post.getCreatedAt());
+        // postDto.setLikeCount((long) post.getLikes().size());
+        // postDto.setShareCount(post.getShareCount());
+        // postDto.setCommentCount((long) post.getComments().size());
+        // if (post.getMedia() != null) {
+        // List<PostMediaDto> mediaDtos = post.getMedia().stream()
+        // .map(media -> {
+        // PostMediaDto mediaDto = new PostMediaDto();
+        // mediaDto.setMediaUrl(media.getMediaUrl());
+        // mediaDto.setMediaType(media.getMediaType());
+        // return mediaDto;
+        // })
+        // .toList();
+        // postDto.setMedia(mediaDtos);
+        // } else {
+        // postDto.setMedia(Collections.emptyList());
+        // }
+
+        // save to Redis cache
+        redisTemplate.opsForHash().put(postKey, "content", postDto.getContent());
+        redisTemplate.opsForHash().put(postKey, "createdAt", postDto.getCreatedAt().toString());
+        redisTemplate.opsForHash().put(postKey, "likeCount", String.valueOf(postDto.getLikeCount()));
+        redisTemplate.opsForHash().put(postKey, "commentCount", String.valueOf(postDto.getCommentCount()));
+        redisTemplate.opsForHash().put(postKey, "shareCount", String.valueOf(postDto.getShareCount()));
+        redisTemplate.opsForHash().put(postKey, "mediaUrls", String.join(",", postDto.getMedia().stream()
+                .map(PostMediaDto::getMediaUrl)
+                .toList()));
+        redisTemplate.expire(postKey, Duration.ofDays(7));
 
         return postDto;
     }
@@ -181,9 +272,13 @@ public class PostService {
         // mapping,
         // you could simply do postRepo.delete(post) instead of
         // mediaRepo.deleteAll(...).
-        // But since we dont  explicitly called mediaRepo.deleteAll(...), now just delete the
+        // But since we dont explicitly called mediaRepo.deleteAll(...), now just delete
+        // the
         // post.
         postRepo.delete(post);
+        String postKey = "post:" + postId;
+        redisTemplate.delete(postKey);
+
     }
 
     @Transactional
@@ -198,12 +293,68 @@ public class PostService {
             like = new PostLike();
             like.setPost(post);
             like.setUser(userRepo.getReferenceById(userId)); // more robust than just new User().setId()
-            flag=true;
+            flag = true;
         }
         like.setLikeType(likeType);
         like.setLikedAt(LocalDateTime.now());
-        if(flag)
+        if (flag)
             post.getLikes().add(like); // add to post's likes collection
+
+        // -----------------------------
+        // 1) Build the Redis keys
+        // -----------------------------
+        String likeHashKey = "post:" + postId + ":likes"; // e.g. "post:123:likes"
+        String postKey = "post:" + postId; // e.g. "post:123" (the main hash holding counts)
+        String userIdStr = userId.toString();
+        String newTypeStr = String.valueOf(likeType); // e.g. "2" for a “like” reaction
+
+        // -----------------------------
+        // 2) Fetch Old Reaction (if any)
+
+        System.out.println(likeHashKey);
+        System.out.println(userIdStr);
+        Object oldTypeObj = null;
+        try {
+            oldTypeObj = redisTemplate.opsForHash().get(likeHashKey, userIdStr);
+        } catch (Exception e) {
+            System.out.println("hello world");
+            e.printStackTrace(); // <---- ADD THIS!
+        }
+        String oldTypeStr = (oldTypeObj == null) ? null : (String) oldTypeObj;
+
+        // print to debug
+
+        System.out.println(oldTypeStr);
+
+        // -----------------------------
+        // 3) Decide what to do based on old vs. new
+        // -----------------------------
+        if (likeType == 0) {
+            // The user is “un-reacting” (no reaction). If there was an old reaction, remove
+            // it.
+            if (oldTypeStr != null) {
+                // 3a) Remove the field from the reaction‐hash
+                redisTemplate.opsForHash().delete(likeHashKey, userIdStr);
+                // 3b) Decrement the total likeCount in the main post hash
+                redisTemplate.opsForHash().increment(postKey, "likeCount", -1);
+            }
+            // If oldTypeStr was already null (no prior reaction), do nothing.
+        } else {
+            // The user is reacting with a non-zero type (1..5).
+            if (oldTypeStr == null || oldTypeStr.equals("0")) {
+                // 3c) Brand-new reaction → increment total
+                redisTemplate.opsForHash().put(likeHashKey, userIdStr, newTypeStr);
+                redisTemplate.opsForHash().increment(postKey, "likeCount", 1);
+            } else if (!oldTypeStr.equals(newTypeStr)) {
+                // 3d) User is switching reaction from e.g. “love (1)” to “wow (3)”
+                // Just overwrite the field, no change to likeCount
+                redisTemplate.opsForHash().put(likeHashKey, userIdStr, newTypeStr);
+            }
+            // else: oldTypeStr.equals(newTypeStr) → user clicked the same reaction again;
+            // do nothing
+        }
+
+        System.out.println("osadharon");
 
     }
 
@@ -242,17 +393,19 @@ public class PostService {
             // Add this new comment to the parent's replies collection
             parent.getReplies().add(newComment);
 
-
         }
 
         // if (parent != null) {
-        //     parent.getReplies().add(newComment);
-        //     postCommentRepo.save(parent);
+        // parent.getReplies().add(newComment);
+        // postCommentRepo.save(parent);
         // }
 
         // 5) Save only the new comment. JPA will cascade properly (if you’ve set
         // cascade on PostComment).
         newComment = postCommentRepo.save(newComment);
+
+        String postKey = "post:" + postId;
+        redisTemplate.opsForHash().increment(postKey, "commentCount", 1);
 
         return newComment.getId();
     }
@@ -331,6 +484,11 @@ public class PostService {
         // 4) Delete the comment. Because of cascade & orphanRemoval on 'replies',
         // any replies (children) of this comment will be deleted automatically.
         postCommentRepo.delete(comment);
+
+        // 5) Decrement the comment count in Redis
+        String postKey = "post:" + postId;
+        redisTemplate.opsForHash().increment(postKey, "commentCount", -1);
+
     }
 
     @Transactional
@@ -417,6 +575,9 @@ public class PostService {
         // But calling save(post) explicitly here is fine and ensures changes are queued
         // up.
         postRepo.save(post);
+
+        // 8) Update the Redis cache for this post
+        updatePostCache(post);
     }
 
     private String guessResourceTypeFromUrl(String url) {
@@ -469,6 +630,62 @@ public class PostService {
 
         // 6) Return only "gpaxntrzepz2jw6znhy7"
         return publicIdWithExtension.substring(0, lastDot);
+    }
+
+    @Transactional
+    public PostDto getPostForFeed(Long postId) {
+        String postKey = "post:" + postId;
+        // Try to fetch from Redis
+        Map<Object, Object> cached = redisTemplate.opsForHash().entries(postKey);
+
+        if (cached != null && !cached.isEmpty()) {
+            // Build DTO from Redis hash
+            PostDto dto = new PostDto();
+            dto.setId(postId);
+            dto.setContent((String) cached.get("content"));
+            dto.setCreatedAt(LocalDateTime.parse((String) cached.get("createdAt")));
+            dto.setLikeCount(Long.parseLong((String) cached.getOrDefault("likeCount", "0")));
+            dto.setCommentCount(Long.parseLong((String) cached.getOrDefault("commentCount", "0")));
+            dto.setShareCount(Long.parseLong((String) cached.getOrDefault("shareCount", "0")));
+
+            // Handle mediaUrls
+            String mediaCsv = (String) cached.get("mediaUrls");
+            if (mediaCsv != null && !mediaCsv.isEmpty()) {
+                List<PostMediaDto> media = Arrays.stream(mediaCsv.split(","))
+                        .map(url -> {
+                            PostMediaDto m = new PostMediaDto();
+                            m.setMediaUrl(url);
+                            m.setMediaType(""); // If needed, fetch from DB or cache as well
+                            return m;
+                        })
+                        .toList();
+                dto.setMedia(media);
+            } else {
+                dto.setMedia(Collections.emptyList());
+            }
+            return dto;
+        }
+
+        // Fallback to DB (and repopulate Redis for next time)
+        Post post = postRepo.findByIdWithMedia(postId).orElse(null);
+        if (post == null)
+            throw new RuntimeException("Post not found");
+
+        PostDto dto = convertToDto(post);
+
+        // Repopulate Redis (optional: handle in async/background for massive scale)
+        redisTemplate.opsForHash().put(postKey, "content", dto.getContent());
+        redisTemplate.opsForHash().put(postKey, "createdAt", dto.getCreatedAt().toString());
+        redisTemplate.opsForHash().put(postKey, "likeCount", String.valueOf(dto.getLikeCount()));
+        redisTemplate.opsForHash().put(postKey, "commentCount", String.valueOf(dto.getCommentCount()));
+        redisTemplate.opsForHash().put(postKey, "shareCount", String.valueOf(dto.getShareCount()));
+        if (dto.getMedia() != null && !dto.getMedia().isEmpty()) {
+            redisTemplate.opsForHash().put(postKey, "mediaUrls",
+                    dto.getMedia().stream().map(PostMediaDto::getMediaUrl).collect(Collectors.joining(",")));
+        }
+        redisTemplate.expire(postKey, Duration.ofDays(7));
+
+        return dto;
     }
 
     @Transactional
@@ -542,6 +759,11 @@ public class PostService {
         // 5) Increment the original’s shareCount and persist
         originalPost.incrementShareCount();
         postRepo.save(originalPost);
+
+        String postKey = "post:" + postId;
+        redisTemplate.opsForHash().increment(postKey, "shareCount", 1);
+
+        updatePostCache(sharedPost); // Update Redis cache for the new shared post
 
         return sharedPost.getId();
     }

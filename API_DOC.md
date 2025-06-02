@@ -25,7 +25,8 @@ https://localhost:8001/api/v1
 7. [Learning](#7-learning)
 8. [Groups & Community](#8-groups--community)
 9. [User Following](#9-user-following)
-10. [Versioning & Changelog](#versioning--changelog)
+10. [Feed](#10-feed)
+11. [Versioning & Changelog](#versioning--changelog)
 
 ---
 
@@ -1243,7 +1244,6 @@ Alternate flow: empty array → suggest broadening criteria.
 
 ## 9. User Following
 
-
 ### Table of Contents
 
 1. [Connection Management](#91-connection-management)  
@@ -1367,3 +1367,77 @@ All connection-related endpoints are prefixed with `/api/v1/connections`
 ## Versioning & Changelog
 
 - **v1.0** – Initial release covering UC01–UC12
+
+---
+
+## 10. Feed
+
+### 10.1 Get Personalized Feed
+
+- **Method:** `GET`
+- **Endpoint:** `/feed`
+- **Description:** Retrieve a personalized, ranked feed of posts for the authenticated user. Supports cursor-based pagination.
+
+**Query Parameters:**
+
+| Name      | Type  | Required | Description                                                              |
+| --------- | ----- | -------- | ------------------------------------------------------------------------ |
+| limit     | int   | No       | Number of posts to return per page (default: 10, max: 50)                |
+| rankScore | float | No       | Cursor for pagination: rankScore of the last post from previous response |
+| postId    | long  | No       | Cursor for pagination: postId of the last post from previous response    |
+
+**Response:** `200 OK`
+
+```json
+{
+  "items": [
+    {
+      "postId": 2053,
+      "authorId": 3,
+      "authorName": "nayem78",
+      "authorAvatarUrl": "",
+      "contentSnippet": "lura",
+      "mediaUrls": [],
+      "createdAt": "2025-06-02T11:59:30.879043547Z",
+      "likeCount": 0,
+      "commentCount": 0,
+      "shareCount": 0,
+      "rankScore": 1.748865570879e12,
+      "myLikeType": 0,
+      "isSharedByMe": false
+    }
+    // ... more items
+  ],
+  "nextCursor": {
+    "rankScore": 1748860607994,
+    "postId": 1802
+  }
+}
+```
+
+**Field Descriptions:**
+
+- `items`: Array of feed post objects.
+
+  - `postId`: Unique ID of the post.
+  - `authorId`: User ID of the post author.
+  - `authorName`: Username of the author.
+  - `authorAvatarUrl`: URL to the author's avatar (may be empty or null).
+  - `contentSnippet`: Short preview of the post content (may be null).
+  - `mediaUrls`: Array of media URLs attached to the post.
+  - `createdAt`: ISO timestamp of post creation (may be null for legacy/shared posts).
+  - `likeCount`: Number of likes/reactions.
+  - `commentCount`: Number of comments.
+  - `shareCount`: Number of times the post was shared.
+  - `rankScore`: Feed ranking score (used for ordering and pagination).
+  - `myLikeType`: Your reaction type to this post (0: none, 1: love, 2: like, 3: wow, 4: angry, 5: haha).
+  - `isSharedByMe`: Boolean, true if you have shared this post.
+
+- `nextCursor`: Object for cursor-based pagination. Use these values as `rankScore` and `postId` in the next request to fetch the next page.
+
+**Error Responses:**
+
+| Status Code | Description           | Response Body                         |
+| ----------- | --------------------- | ------------------------------------- |
+| 401         | Unauthorized          | `{"error": "User not authenticated"}` |
+| 500         | Internal Server Error | `{"error": "Error message"}`          |

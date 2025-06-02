@@ -1,1 +1,5 @@
+com/example/demo/service/PostServiceIntegrationTest$CloudinaryTestConfig.class
 com/example/demo/DemoApplicationTests.class
+com/example/demo/repository/Posts/PostCommentRepositoryTest.class
+com/example/demo/service/PostServiceIntegrationTest.class
+com/example/demo/repository/UserRepositoryTest.class

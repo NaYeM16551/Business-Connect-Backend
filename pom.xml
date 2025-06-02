@@ -148,7 +148,31 @@
 			<artifactId>mockito-core</artifactId>
 			<scope>test</scope>
 		</dependency>
-	</dependencies>
+		<!-- Spring Data Redis for cache + sorted sets -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+			<version>3.4.5</version>
+		</dependency>
+		<!-- Lettuce (the default Redis client); you can also use Jedis if you prefer -->
+		<dependency>
+			<groupId>io.lettuce</groupId>
+			<artifactId>lettuce-core</artifactId>
+			<version>6.3.0.RELEASE</version>
+		</dependency>
+		<!-- 2) (Optional) If you want to specify Lettuce explicitly -->
+		
+	
+   <dependency>
+     <groupId>org.testng</groupId>
+     <artifactId>testng</artifactId>
+     <version>7.0.0</version>
+   </dependency>
+ </dependencies>
 	<build>
 		<plugins>
 			<plugin>
