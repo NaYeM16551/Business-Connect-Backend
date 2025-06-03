@@ -65,10 +65,14 @@ public class PostService {
     private void updatePostCache(Post post) {
         String postKey = "post:" + post.getId();
         redisTemplate.opsForHash().put(postKey, "content", post.getContent());
-        redisTemplate.opsForHash().put(postKey, "createdAt", post.getCreatedAt().toString());
-        redisTemplate.opsForHash().put(postKey, "likeCount", String.valueOf(post.getLikes().size()));
-        redisTemplate.opsForHash().put(postKey, "commentCount", String.valueOf(post.getComments().size()));
-        redisTemplate.opsForHash().put(postKey, "shareCount", String.valueOf(post.getShareCount()));
+        // redisTemplate.opsForHash().put(postKey, "createdAt",
+        // post.getCreatedAt().toString());
+        // redisTemplate.opsForHash().put(postKey, "likeCount",
+        // String.valueOf(post.getLikes().size()));
+        // redisTemplate.opsForHash().put(postKey, "commentCount",
+        // String.valueOf(post.getComments().size()));
+        // redisTemplate.opsForHash().put(postKey, "shareCount",
+        // String.valueOf(post.getShareCount()));
         if (post.getMedia() != null && !post.getMedia().isEmpty()) {
             redisTemplate.opsForHash().put(postKey, "mediaUrls",
                     post.getMedia().stream().map(PostMedia::getMediaUrl).collect(Collectors.joining(",")));
@@ -333,6 +337,9 @@ public class PostService {
             // do nothing
         }
 
+        // After like logic, increment interaction if not self-like
+        incrementInteractionCountIfNeeded(userId, post.getUser().getId());
+
         System.out.println("osadharon");
 
     }
@@ -383,8 +390,13 @@ public class PostService {
         // cascade on PostComment).
         newComment = postCommentRepo.save(newComment);
 
+        // commenting owns post doesn't increment ranking
         String postKey = "post:" + postId;
-        redisTemplate.opsForHash().increment(postKey, "commentCount", 1);
+        if (!userId.equals(post.getUser().getId()))
+            redisTemplate.opsForHash().increment(postKey, "commentCount", 1);
+
+        // After comment logic, increment interaction if not self-comment
+        incrementInteractionCountIfNeeded(userId, post.getUser().getId());
 
         return newComment.getId();
     }
@@ -549,8 +561,7 @@ public class PostService {
         // 7) Finally, save the Post again to update its relationships.
         // If you annotate this method with @Transactional, you could actually get away
         // with
-        // not calling save(post) a second time because Hibernate will flush on
-        // transaction commit.
+        // not calling save(post) because Hibernate will flush on transaction commit.
         // But calling save(post) explicitly here is fine and ensures changes are queued
         // up.
         postRepo.save(post);
@@ -698,8 +709,7 @@ public class PostService {
     }
 
     @Transactional
-    public void triggerEventListerner(Post post)
-    {
+    public void triggerEventListerner(Post post) {
         // 1) Convert LocalDateTime to Instant (UTC), needed for Redis scoring
         Instant createdInstant = post.getCreatedAt()
                 .atZone(ZoneOffset.systemDefault())
@@ -744,9 +754,9 @@ public class PostService {
         sharedPost.setCreatedAt(LocalDateTime.now());
 
         boolean originalParentExist = originalPost.getParentPostId() != null && originalPost.getParentPostId() != -1;
-
+        Post originalParentPost=null;
         if (originalParentExist) {
-            Post originalParentPost = postRepo.findById(originalPost.getParentPostId())
+            originalParentPost = postRepo.findById(originalPost.getParentPostId())
                     .orElseThrow(() -> new IllegalArgumentException("Original parent post not found"));
             originalParentPost.incrementShareCount();
             postRepo.save(originalParentPost);
@@ -766,7 +776,8 @@ public class PostService {
         postRepo.save(originalPost);
 
         String postKey = "post:" + postId;
-        redisTemplate.opsForHash().increment(postKey, "shareCount", 1);
+        if (!userId.equals(originalPost.getUser().getId()))
+            redisTemplate.opsForHash().increment(postKey, "shareCount", 1);
 
         // 6) Optionally set a TTL so old posts auto‐expire:
         redisTemplate.expire(postKey, Duration.ofDays(7));
@@ -774,7 +785,43 @@ public class PostService {
         // 7) Trigger the event listener to update feeds and caches
         triggerEventListerner(sharedPost); // This will publish the PostCreatedEvent
 
+        // 5.1) Store parent post info in Redis for the shared post (for feed display)
+        String sharedPostKey = "post:" + sharedPost.getId();
+        // Parent info: parentPostId, parentAuthorId, parentAuthorName,
+        // parentAuthorAvatarUrl
+        Long parentPostId = sharedPost.getParentPostId();
+         {
+            Post parentPost = originalParentExist ? originalParentPost : originalPost;
+            if (parentPost != null && parentPost.getUser() != null) {
+                redisTemplate.opsForHash().put(sharedPostKey, "parentPostId", String.valueOf(parentPostId));
+                redisTemplate.opsForHash().put(sharedPostKey, "parentAuthorId",
+                        String.valueOf(parentPost.getUser().getId()));
+                redisTemplate.opsForHash().put(sharedPostKey, "parentAuthorName",
+                        parentPost.getUser().getUsername() != null ? parentPost.getUser().getUsername() : "");
+                redisTemplate.opsForHash().put(sharedPostKey, "parentAuthorAvatarUrl",
+                        parentPost.getUser().getProfilePictureUrl() != null
+                                ? parentPost.getUser().getProfilePictureUrl()
+                                : "");
+                redisTemplate.opsForHash().put(sharedPostKey, "parentPostContentSnippet",
+                        parentPost.getContent().length() <= 200
+                                ? parentPost.getContent()
+                                : parentPost.getContent().substring(0, 200));
+            }
+        }
+
+        // After share logic, increment interaction if not self-share
+        incrementInteractionCountIfNeeded(userId, originalPost.getUser().getId());
+
         return sharedPost.getId();
+    }
+
+    // Helper: Increment interaction count in Redis if follower interacts with
+    // followee
+    private void incrementInteractionCountIfNeeded(Long actorUserId, Long postAuthorId) {
+        if (actorUserId == null || postAuthorId == null || actorUserId.equals(postAuthorId))
+            return;
+        String key = "interaction:" + actorUserId + "," + postAuthorId;
+        redisTemplate.opsForValue().increment(key, 1);
     }
 
 }

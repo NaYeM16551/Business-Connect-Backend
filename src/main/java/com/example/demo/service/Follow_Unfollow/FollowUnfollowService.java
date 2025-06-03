@@ -1,25 +1,25 @@
 package com.example.demo.service.Follow_Unfollow;
 
+import java.util.List;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import com.example.demo.dto.User.UserResponse;
+import com.example.demo.model.User;
 import com.example.demo.model.Follow_Unfollow.Follow;
 import com.example.demo.repository.UserRepository;
 import com.example.demo.repository.Follow_Unfollow.FollowUnfollowRepository;
-import com.example.demo.dto.User.UserResponse;
-import com.example.demo.model.User;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
-
 
 @Service
 public class FollowUnfollowService {
 
-    // This service will handle the business logic for following and unfollowing users.
-    // It will interact with the FollowUnfollowRepository to perform database operations.
+    // This service will handle the business logic for following and unfollowing
+    // users.
+    // It will interact with the FollowUnfollowRepository to perform database
+    // operations.
 
     // Example methods could include:
     // - followUser(Long followerId, Long followeeId)
@@ -27,66 +27,81 @@ public class FollowUnfollowService {
     // - getFollowers(Long userId)
     // - getFollowing(Long userId)
 
-    // Implement these methods as needed, ensuring to handle exceptions and validations.
+    // Implement these methods as needed, ensuring to handle exceptions and
+    // validations.
 
     @Autowired
     private FollowUnfollowRepository followUnfollowRepo;
-    @Autowired 
+    @Autowired
     private UserRepository userRepo;
-
-
+    @Autowired
+    private org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
 
     /**
- * Makes the user with ID = followerId follow the user with ID = followeeId.
- *
- * @param followerId the ID of the user who wants to follow
- * @param followeeId the ID of the user to be followed
- * @throws IllegalArgumentException if followerId == followeeId,
- *                                  if either user does not exist,
- *                                  or if the follow relationship already exists
- */
-@Transactional
-public void followUser(Long followerId, Long followeeId) {
-    // 1) Prevent a user from following themselves
-    if (followerId.equals(followeeId)) {
-        throw new IllegalArgumentException("You cannot follow yourself.");
+     * Makes the user with ID = followerId follow the user with ID = followeeId.
+     *
+     * @param followerId the ID of the user who wants to follow
+     * @param followeeId the ID of the user to be followed
+     * @throws IllegalArgumentException if followerId == followeeId,
+     *                                  if either user does not exist,
+     *                                  or if the follow relationship already exists
+     */
+    @Transactional
+    public void followUser(Long followerId, Long followeeId) {
+        // 1) Prevent a user from following themselves
+        if (followerId.equals(followeeId)) {
+            throw new IllegalArgumentException("You cannot follow yourself.");
+        }
+
+        // 2) Load the follower and followee User entities (throw if missing)
+        User follower = userRepo.findById(followerId)
+                .orElseThrow(() -> new IllegalArgumentException("Follower user not found."));
+        User followee = userRepo.findById(followeeId)
+                .orElseThrow(() -> new IllegalArgumentException("User to follow not found."));
+
+        // 3) Check if a follow relationship already exists
+        boolean alreadyFollows = followUnfollowRepo.existsByFollowerIdAndFolloweeId(followerId, followeeId);
+        if (alreadyFollows) {
+            throw new IllegalArgumentException("You are already following this user.");
+        }
+
+        // 4) Create and save the new Follow entity
+        Follow newFollow = new Follow(follower, followee);
+        followUnfollowRepo.save(newFollow);
+
+        //create interaction key in Redis
+        String interactionKey = "interaction:" + followerId + "," + followeeId;
+        if(interactionKey!=null && !interactionKey.isEmpty()) {
+            redisTemplate.opsForValue().set(interactionKey, "1");
+            System.out.println("Interaction key "+ interactionKey + " created with value 1");
+        }
     }
 
-    // 2) Load the follower and followee User entities (throw if missing)
-    User follower = userRepo.findById(followerId)
-        .orElseThrow(() -> new IllegalArgumentException("Follower user not found."));
-    User followee = userRepo.findById(followeeId)
-        .orElseThrow(() -> new IllegalArgumentException("User to follow not found."));
+    @Transactional
+    public void unfollowUser(Long followerId, Long followeeId) {
+        // 1) Prevent a user from unfollowing themselves
+        if (followerId.equals(followeeId)) {
+            throw new IllegalArgumentException("You cannot unfollow yourself.");
+        }
+        
+        System.out.println("Unfollow user with ID: " + followeeId + " by follower ID: " + followerId);
+        // 2) Check if the follow relationship exists
+        boolean exists = followUnfollowRepo.existsByFollowerIdAndFolloweeId(followerId, followeeId);
+        if (!exists) {
+            throw new IllegalArgumentException("You are not following this user.");
+        }
 
-    // 3) Check if a follow relationship already exists
-    boolean alreadyFollows = followUnfollowRepo.existsByFollowerIdAndFolloweeId(followerId, followeeId);
-    if (alreadyFollows) {
-        throw new IllegalArgumentException("You are already following this user.");
+        // 3) Remove the follow relationship
+        followUnfollowRepo.deleteByFollowerIdAndFolloweeId(followerId, followeeId);
+
+        // 4) Reset interaction count in Redis
+        String interactionKey = "interaction:" + followerId + "," + followeeId;
+        if(interactionKey!=null && !interactionKey.isEmpty())
+            redisTemplate.delete(interactionKey);
+        System.out.println("Interaction key "+ interactionKey);    
     }
 
-    // 4) Create and save the new Follow entity
-    Follow newFollow = new Follow(follower, followee);
-    followUnfollowRepo.save(newFollow);
-}
-
-@Transactional
-public void unfollowUser(Long followerId, Long followeeId) {
-    // 1) Prevent a user from unfollowing themselves
-    if (followerId.equals(followeeId)) {
-        throw new IllegalArgumentException("You cannot unfollow yourself.");
-    }
-
-    // 2) Check if the follow relationship exists
-    boolean exists = followUnfollowRepo.existsByFollowerIdAndFolloweeId(followerId, followeeId);
-    if (!exists) {
-        throw new IllegalArgumentException("You are not following this user.");
-    }
-
-    // 3) Remove the follow relationship
-    followUnfollowRepo.deleteByFollowerIdAndFolloweeId(followerId, followeeId);
-}
-
-/**
+    /**
      * Returns a list of UserResponse DTOs for all users that `userId` is following.
      */
     @Transactional(readOnly = true)

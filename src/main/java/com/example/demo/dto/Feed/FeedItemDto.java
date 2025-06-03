@@ -18,7 +18,14 @@ public class FeedItemDto {
     private Long shareCount;
     private Double rankScore;   // the Redis ZSET score
     private Long myLikeType;
-    private boolean IsSharedByMe;
+    
+
+    //parent info
+    private Long parentPostId;  // if this is a share, the original post ID
+    private String parentAuthorName; // if this is a share, the original author's name
+    private String parentAuthorAvatarUrl; // if this is a share, the original author's avatar URL
+    private Long parentAuthorId;
+    private String parentPostContentSnippet;
 
     // ————— Getters & Setters —————
     public Long getPostId() { return postId; }
@@ -57,9 +64,19 @@ public class FeedItemDto {
     public Long getMyLikeType() { return myLikeType; }
     public void setMyLikeType(Long myLikeType) { this.myLikeType = myLikeType; }
 
-    public boolean getIsSharedByMe() { return IsSharedByMe; }
-    public void setIsSharedByMe(boolean sharedByMe) { IsSharedByMe = sharedByMe; }
 
+    public Long getParentPostId() { return parentPostId; }
+    public void setParentPostId(Long parentPostId) { this.parentPostId = parentPostId; }
+    public String getParentAuthorName() { return parentAuthorName; }
+    public void setParentAuthorName(String parentAuthorName) { this.parentAuthorName = parentAuthorName; }
+    public String getParentAuthorAvatarUrl() { return parentAuthorAvatarUrl; }
+    public void setParentAuthorAvatarUrl(String parentAuthorAvatarUrl) { this.parentAuthorAvatarUrl = parentAuthorAvatarUrl; }
+    
+    public Long getParentAuthorId() { return parentAuthorId; }
+    public void setParentAuthorId(Long parentAuthorId) { this.parentAuthorId = parentAuthorId;}
+
+    public String getParentPostContentSnippet() { return parentPostContentSnippet; }
+    public void setParentPostContentSnippet(String parentPostContentSnippet) { this.parentPostContentSnippet = parentPostContentSnippet; }
 
 
 }

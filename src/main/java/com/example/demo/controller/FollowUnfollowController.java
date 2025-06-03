@@ -33,6 +33,7 @@ public class FollowUnfollowController {
             Authentication authentication ) {
         // With Spring Security, principal is guaranteed non-null (unless endpoint is not secured).
         Long followerId = Long.valueOf(authentication.getName());
+        System.out.println("Following user: " + followeeId + " by follower: " + followerId);
         followUnfollowService.followUser(followerId, followeeId);
         return ResponseEntity.ok(Map.of("message", "Successfully followed user " + followeeId));
     }
@@ -46,6 +47,7 @@ public class FollowUnfollowController {
             @PathVariable("userID") Long followeeId,
             Authentication authentication) {
         Long followerId = Long.valueOf(authentication.getName());
+        System.out.println("Unfollowing user: " + followeeId + " by follower: " + followerId);
         followUnfollowService.unfollowUser(followerId, followeeId);
         return ResponseEntity.ok(Map.of("message", "Successfully unfollowed user " + followeeId));
     }

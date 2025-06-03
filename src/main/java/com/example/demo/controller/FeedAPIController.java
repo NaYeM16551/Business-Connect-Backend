@@ -188,6 +188,23 @@ public class FeedAPIController {
             String mediaCsv = (String) postHash.get("mediaUrls");
             boolean hasMedia = (mediaCsv != null && !mediaCsv.isBlank());
 
+            // 1.5) Fetch interaction count between user and author
+            Long authorId = null;
+            try {
+                authorId = Long.valueOf((String) postHash.get("authorId"));
+            } catch (Exception e) {
+                /* ignore */ }
+            long interactionCnt = 0L;
+            if (authorId != null && !authorId.equals(userId)) {
+                String interactionKey = "interaction:" + userId + "," + authorId;
+                String cntStr = redis.opsForValue().get(interactionKey);
+                if (cntStr != null && !cntStr.isBlank()) {
+                    interactionCnt = Long.parseLong(cntStr);
+                } else {
+                    interactionCnt = -10L; // Default to 0 if not found
+                }
+            }
+
             // 2) Compute recencyScore = exp(-hoursAgo/24)
             double hoursAgo = (nowMs - createdAtMs) / 3_600_000.0;
             double recencyScore = Math.exp(-hoursAgo / 24.0);
@@ -198,13 +215,16 @@ public class FeedAPIController {
                     + 0.8 * Math.log(1 + shareCount);
 
             // 4) mediaBoost
-            double mediaBoost = hasMedia ? 0.1 : 0.0;
+            double mediaBoost = hasMedia ? 1 : 0.0;
+
+            // 4.5) interactionBoost
+            double interactionBoost = interactionCnt >= 0 ? Math.log(1 + interactionCnt) : -5;
 
             // 5) finalScore
-            double finalScore = 0.6 * recencyScore + 0.3 * engagementScore + mediaBoost;
+            double finalScore = 0.6 * recencyScore + 0.3 * engagementScore + 0.1 * mediaBoost + 0.2 * interactionBoost;
 
-            System.out.printf(" userId %d:,Post %d: , finalScore=%.4f%n",
-                    userId, pid, finalScore);
+            System.out.printf(" userId %d:,Post %d: , finalScore=%.4f, interactionBoost=%f\n",
+                    userId, pid, finalScore, interactionBoost);
 
             // 6) Build the DTO and set rankScore
             FeedItemDto dto = new FeedItemDto();
@@ -217,6 +237,34 @@ public class FeedAPIController {
             dto.setAuthorAvatarUrl((String) postHash.get("authorAvatarUrl"));
             dto.setContentSnippet((String) postHash.get("content"));
             dto.setCreatedAt(createdAtStr);
+
+            // Parent info for shares (null check)
+            String parentPostIdStr = (String) postHash.get("parentPostId");
+            if (parentPostIdStr != null && !parentPostIdStr.isBlank()) {
+                try {
+                    dto.setParentPostId(Long.valueOf(parentPostIdStr));
+                } catch (Exception e) {
+                    dto.setParentPostId(null);
+                }
+            }
+            String parentAuthorIdStr = (String) postHash.get("parentAuthorId");
+            if (parentAuthorIdStr != null && !parentAuthorIdStr.isBlank()) {
+                try {
+                    dto.setParentAuthorId(Long.valueOf(parentAuthorIdStr));
+                } catch (Exception e) {
+                    dto.setParentAuthorId(null);
+                }
+            }
+            String parentAuthorName = (String) postHash.get("parentAuthorName");
+            if (parentAuthorName != null)
+                dto.setParentAuthorName(parentAuthorName);
+            String parentAuthorAvatarUrl = (String) postHash.get("parentAuthorAvatarUrl");
+            if (parentAuthorAvatarUrl != null)
+                dto.setParentAuthorAvatarUrl(parentAuthorAvatarUrl);
+
+               String parentPostContentSnippet = (String) postHash.get("parentPostContentSnippet");
+               if (parentPostContentSnippet != null)
+                   dto.setParentPostContentSnippet(parentPostContentSnippet);
 
             List<String> mediaList;
             if (mediaCsv == null || mediaCsv.isEmpty()) {
@@ -239,7 +287,7 @@ public class FeedAPIController {
                 dto.setMyLikeType(0L);
             }
 
-            dto.setIsSharedByMe(false);
+            //dto.setIsSharedByMe(false);
             items.add(dto);
         }
 
