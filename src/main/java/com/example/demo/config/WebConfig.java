@@ -11,12 +11,18 @@ public class WebConfig {
     @Bean
     public WebMvcConfigurer corsConfigurer() {
         return new WebMvcConfigurer() {
-            // @SuppressWarnings("null")
             @Override
             public void addCorsMappings(@NonNull CorsRegistry registry) {
                 registry.addMapping("/api/**")
-                        .allowedOrigins("https://your-frontend.com")
-                        .allowedMethods("GET", "POST", "PUT", "DELETE");
+                        .allowedOrigins(
+                                "http://localhost:3000", // React (Create React App)
+                                "http://localhost:5173", // Vite
+                                "https://your-frontend.com", // production domain
+                                "http://localhost:8081/")
+                        .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                        .allowedHeaders("Authorization", "Content-Type", "X-Requested-With") // <-- allow these
+                        .exposedHeaders("Authorization") // if you ever need to read it client-side
+                        .allowCredentials(true);
             }
         };
     }

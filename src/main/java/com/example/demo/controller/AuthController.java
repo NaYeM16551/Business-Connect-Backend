@@ -47,7 +47,7 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
-
+        String authHeader = httpRequest.getHeader("Authorization");
         try {
             RegisterResponse response = authService.register(request);
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -77,8 +77,9 @@ public class AuthController {
     @GetMapping("/verify-email")
     public ResponseEntity<?> verifyEmail(@RequestParam("token") String token) {
         try {
-            authService.verifyEmailToken(token);
-            return ResponseEntity.ok(Map.of("message", "Email verified successfully."));
+            System.out.println("achi re vai achi1") ;
+            var response = authService.verifyEmailToken(token);
+            return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("error", e.getMessage()));
         }

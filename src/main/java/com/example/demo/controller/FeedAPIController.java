@@ -51,7 +51,8 @@ public class FeedAPIController {
     }
 
     /**
-     * GET /api/v1/feed?cursorScore=<score>&cursorPostId=<postId>&limit=<n>
+     * GET
+     * /api/v1/feed?cursorScore=<score>&cursorPostId=<postId>&lastPostTime=<lastTime>&limit=<n>
      *
      * Returns a page of feed items for the currently authenticated user.
      *
@@ -65,6 +66,7 @@ public class FeedAPIController {
     public ResponseEntity<FeedPageResponseDto> getFeed(
             @RequestParam(value = "cursorScore", required = false) Double cursorScore, // dynamic‐score cursor
             @RequestParam(value = "cursorPostId", required = false) Long cursorPostId,
+            @RequestParam(value = "lastPostTime", required = false) String lastTime,
             @RequestParam(value = "limit", defaultValue = "20") int limit,
             Authentication authentication) {
 
@@ -91,10 +93,13 @@ public class FeedAPIController {
                         .thenComparing(FeedItemDto::getPostId, Comparator.reverseOrder()));
 
         // 5) Apply USER’S dynamic cursor entirely in memory
-        List<FeedItemDto> pageItems = applyCursorAndLimit(scoredItems, cursorScore, cursorPostId, limit);
+        List<FeedItemDto> pageItems = applyCursorAndLimit(scoredItems, cursorScore, cursorPostId, limit, lastTime);
 
         // 6) Build nextCursor from the last item we returned
         CursorDto nextCursor = buildNextCursor(pageItems);
+
+        if (nextCursor != null)
+            System.out.println(nextCursor.getLastDateTime());
 
         FeedPageResponseDto page = new FeedPageResponseDto(pageItems, nextCursor);
 
@@ -262,9 +267,9 @@ public class FeedAPIController {
             if (parentAuthorAvatarUrl != null)
                 dto.setParentAuthorAvatarUrl(parentAuthorAvatarUrl);
 
-               String parentPostContentSnippet = (String) postHash.get("parentPostContentSnippet");
-               if (parentPostContentSnippet != null)
-                   dto.setParentPostContentSnippet(parentPostContentSnippet);
+            String parentPostContentSnippet = (String) postHash.get("parentPostContentSnippet");
+            if (parentPostContentSnippet != null)
+                dto.setParentPostContentSnippet(parentPostContentSnippet);
 
             List<String> mediaList;
             if (mediaCsv == null || mediaCsv.isEmpty()) {
@@ -287,7 +292,7 @@ public class FeedAPIController {
                 dto.setMyLikeType(0L);
             }
 
-            //dto.setIsSharedByMe(false);
+            // dto.setIsSharedByMe(false);
             items.add(dto);
         }
 
@@ -311,26 +316,51 @@ public class FeedAPIController {
             List<FeedItemDto> sortedItems,
             Double cursorScore,
             Long cursorPostId,
-            int limit) {
+            int limit, String lastTime) {
 
         List<FeedItemDto> page = new ArrayList<>(limit);
         int count = 0;
+
+        System.out.println("size " + sortedItems.size());
+
+        Instant i1 = null;
+        boolean useSessionRecency = false;
+        if (lastTime != null && !lastTime.isBlank()) {
+            try {
+                i1 = Instant.parse(lastTime);
+                useSessionRecency = true;
+            } catch (Exception e) {
+                useSessionRecency = false;
+            }
+        }
 
         for (FeedItemDto dto : sortedItems) {
             double score = dto.getRankScore();
             long pid = dto.getPostId();
 
+            // Session recency: only add if createdAt > lastTime
+            if (useSessionRecency && i1 != null) {
+                try {
+                    Instant i2 = Instant.parse(dto.getCreatedAt());
+                    if (i2.isAfter(i1)) {
+                        page.add(dto);
+                        count++;
+                        if (count >= limit)
+                            break;
+                        continue;    
+                    }
+                } catch (Exception e) {
+                    // If parsing fails, skip recency filter for this item
+                }
+            }
+
             // If we have a cursor, skip until we find items strictly "after" the cursor
             if (cursorScore != null && cursorPostId != null) {
-                if (score >= cursorScore || pid == cursorPostId) {
-                    // Still equal or “above” the cursor: skip
+                if ((score >= cursorScore || pid == cursorPostId)) {
                     continue;
-                } else if (score == cursorScore && pid >= cursorPostId) {
-                    // Tie on score but postId is not strictly less: skip
+                } else if (score == cursorScore && pid <= cursorPostId) {
                     continue;
                 }
-                // If we reach here: either score < cursorScore, or (score == cursorScore && pid
-                // < cursorPostId)
             }
 
             page.add(dto);
@@ -348,8 +378,9 @@ public class FeedAPIController {
     private CursorDto buildNextCursor(List<FeedItemDto> items) {
         if (!items.isEmpty()) {
             FeedItemDto lastItem = items.get(items.size() - 1);
+            String lastTime = items.get(0).getCreatedAt();
             // Keep it as a Double
-            return new CursorDto(lastItem.getRankScore() - 0.01, lastItem.getPostId());
+            return new CursorDto(lastItem.getRankScore() - 0.01, lastItem.getPostId(), lastTime);
         }
         return null;
     }

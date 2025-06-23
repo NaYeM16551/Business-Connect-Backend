@@ -1,4 +1,6 @@
 package com.example.demo.dto.Feed;
+
+
 /**
  * A “cursor” for paginated feed requests, containing:
  *  - rankScore: the score of the last item in the previous page (epoch ms)
@@ -7,13 +9,15 @@ package com.example.demo.dto.Feed;
 public class CursorDto {
     private double rankScore;
     private Long postId;
+    private String lastDateTime;
 
     // Default no-arg constructor (needed for JSON deserialization)
     public CursorDto() { }
 
-    public CursorDto(double rankScore, Long postId) {
+    public CursorDto(double rankScore, Long postId,String lastDateTime) {
         this.rankScore = rankScore;
         this.postId    = postId;
+        this.lastDateTime=lastDateTime;
     }
 
     // ————— Getters & Setters —————
@@ -22,4 +26,16 @@ public class CursorDto {
 
     public Long getPostId() { return postId; }
     public void setPostId(Long postId) { this.postId = postId; }
+
+    public String getLastDateTime()
+    {
+        return lastDateTime;
+    }
+
+    void setLastDateTime(String lastDateTime)
+    {
+        this.lastDateTime=lastDateTime;
+    }
+
+    
 }

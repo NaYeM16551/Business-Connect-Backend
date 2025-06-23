@@ -1,16 +1,17 @@
 package com.example.demo.security;
 
-import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import jakarta.servlet.http.HttpServletResponse;
 
 @Configuration
 public class SecurityConfig {
@@ -24,17 +25,18 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            .csrf(csrf -> csrf.disable())
-            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/v1/auth/**").permitAll() // 👈 open public routes
-                .anyRequest().authenticated() // 🔐 protect all others
-            )
-            .exceptionHandling(e -> e.authenticationEntryPoint((req, res, ex) -> {
-                res.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
-            }))
-            .formLogin(form -> form.disable()) // 👈 disable default login form
-            .httpBasic(httpBasic -> httpBasic.disable());
+                .cors(org.springframework.security.config.Customizer.withDefaults()) // <— enable CORS support
+                .csrf(csrf -> csrf.disable())
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/v1/auth/**").permitAll() // 👈 open public routes
+                        .anyRequest().authenticated() // 🔐 protect all others
+                )
+                .exceptionHandling(e -> e.authenticationEntryPoint((req, res, ex) -> {
+                    res.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
+                }))
+                .formLogin(form -> form.disable()) // 👈 disable default login form
+                .httpBasic(httpBasic -> httpBasic.disable());
 
         http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 

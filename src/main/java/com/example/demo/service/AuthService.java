@@ -77,17 +77,19 @@ public class AuthService {
 
         registerVerifyUserRepository.save(user);
 
-        String url = "http://localhost:8080/api/v1/auth/verify-email?token=";
+        String url = frontendUrl+"verify-email?token=";
 
         mailService.sendVerificationEmail(user.getEmail(), user.getVerificationToken(), url);
 
-        return new String(
-                "Verification email sent");
+
+        return new String("verification mail sent");
+        
+    
     }
 
     public RegisterResponse register(RegisterRequest request) {
 
-
+        System.out.println(request.email);
 
         Optional<RegisterVerifyUser> optionalVerifyUser = registerVerifyUserRepository.findByEmail(request.email);
 
@@ -154,18 +156,21 @@ public class AuthService {
         mailService.sendVerificationEmail(user.getEmail(), token, url);
     }
 
-    public void verifyEmailToken(String token) {
+    public Map<String, String> verifyEmailToken(String token) {
         RegisterVerifyUser user = registerVerifyUserRepository.findByVerificationToken(token)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid verification token."));
 
         if (user.getVerificationTokenExpiry().isBefore(LocalDateTime.now())) {
             throw new IllegalArgumentException("Verification token has expired.");
         }
-
+        
         user.setIsVerified(true);
         user.setVerificationToken(null);
         user.setVerificationTokenExpiry(null);
         registerVerifyUserRepository.save(user);
+        String jwt = jwtUtil.generateToken(user.getEmail());
+        return Map.of("email", user.getEmail(),"token",jwt);
+        
     }
 
     public void updateProfile(String token, RegisterRequest request) {

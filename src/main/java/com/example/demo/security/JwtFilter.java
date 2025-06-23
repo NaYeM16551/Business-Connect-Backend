@@ -1,9 +1,7 @@
 package com.example.demo.security;
 
-import jakarta.servlet.FilterChain;
-import jakarta.servlet.ServletException;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.List;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -11,8 +9,10 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import java.io.IOException;
-import java.util.List;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 @Component
 public class JwtFilter extends OncePerRequestFilter {
@@ -27,8 +27,7 @@ public class JwtFilter extends OncePerRequestFilter {
     protected void doFilterInternal(
             @org.springframework.lang.NonNull HttpServletRequest request,
             @org.springframework.lang.NonNull HttpServletResponse response,
-            @org.springframework.lang.NonNull FilterChain filterChain
-    ) throws ServletException, IOException {
+            @org.springframework.lang.NonNull FilterChain filterChain) throws ServletException, IOException {
 
         // 1) Print out the request path for debugging
         String path = request.getServletPath();
@@ -36,10 +35,11 @@ public class JwtFilter extends OncePerRequestFilter {
 
         // 2) Skip the JWT check for any public/auth endpoints
         if (path.equals("/api/v1/auth/login") ||
-            path.equals("/api/v1/auth/forgot-password") ||
-            path.equals("/api/v1/auth/register-verify") ||
-            path.equals("/api/v1/auth/reset-password") ||
-            path.equals("/api/v1/auth/register")) {
+                path.equals("/api/v1/auth/forgot-password") ||
+                path.equals("/api/v1/auth/register-verify") ||
+                path.equals("/api/v1/auth/reset-password") ||
+                path.equals("/api/v1/auth/register") ||
+                path.equals("/api/v1/auth/verify-email")) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -73,18 +73,18 @@ public class JwtFilter extends OncePerRequestFilter {
             Long userID = jwtUtil.extractUserId(token);
             System.out.println("User ID extracted from token: " + userID);
 
-            // 8) If we have no Authentication in the SecurityContext, and token is valid, set it
+            // 8) If we have no Authentication in the SecurityContext, and token is valid,
+            // set it
             if (userID != null
                     && SecurityContextHolder.getContext().getAuthentication() == null
                     && jwtUtil.validateToken(token)) {
 
                 // 9) Create an authenticated token with an empty authority list
-                UsernamePasswordAuthenticationToken auth =
-                    new UsernamePasswordAuthenticationToken(
+                UsernamePasswordAuthenticationToken auth = new UsernamePasswordAuthenticationToken(
                         userID.toString(),
                         null,
-                        List.of()  // no roles in this example, but this ensures "authenticated"
-                    );
+                        List.of() // no roles in this example, but this ensures "authenticated"
+                );
 
                 auth.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(auth);

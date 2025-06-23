@@ -1392,19 +1392,23 @@ All connection-related endpoints are prefixed with `/api/v1/connections`
 {
   "items": [
     {
-      "postId": 2053,
-      "authorId": 3,
-      "authorName": "nayem78",
-      "authorAvatarUrl": "",
-      "contentSnippet": "lura",
-      "mediaUrls": [],
-      "createdAt": "2025-06-02T11:59:30.879043547Z",
-      "likeCount": 0,
-      "commentCount": 0,
-      "shareCount": 0,
-      "rankScore": 1.748865570879e12,
-      "myLikeType": 0,
-      "isSharedByMe": false
+      "postId": 2202,
+            "authorId": 3,
+            "authorName": "nayem78",
+            "authorAvatarUrl": "",
+            "contentSnippet": "My post",
+            "mediaUrls": [],
+            "createdAt": "2025-06-02T18:52:09.294376504Z",
+            "likeCount": 0,
+            "commentCount": 0,
+            "shareCount": 22,
+            "rankScore": 1.1134309070442385,
+            "myLikeType": 0,
+            "parentPostId": null,
+            "parentAuthorName": null,
+            "parentAuthorAvatarUrl": null,
+            "parentAuthorId": null,
+            "parentPostContentSnippet": null
     }
     // ... more items
   ],
@@ -1431,7 +1435,11 @@ All connection-related endpoints are prefixed with `/api/v1/connections`
   - `shareCount`: Number of times the post was shared.
   - `rankScore`: Feed ranking score (used for ordering and pagination).
   - `myLikeType`: Your reaction type to this post (0: none, 1: love, 2: like, 3: wow, 4: angry, 5: haha).
-  - `isSharedByMe`: Boolean, true if you have shared this post.
+  - `parentPostId`: ID of the parent post (if this post is a reply).
+  - `parentAuthorName`: Username of the parent post's author (if this post is a reply).
+  - `parentAuthorAvatarUrl`: URL to the parent post's author's avatar (if this post is a reply).
+  - `parentAuthorId`: User ID of the parent post's author (if this post is a reply).
+  - `parentPostContentSnippet`: Short preview of the parent post's content (if this post is a reply).
 
 - `nextCursor`: Object for cursor-based pagination. Use these values as `rankScore` and `postId` in the next request to fetch the next page.
 

@@ -11,9 +11,12 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+
+import com.example.demo.model.Groups.Group;
 
 @Entity
 @Table(name = "posts")
@@ -24,6 +27,16 @@ public class Post {
 
     @ManyToOne(fetch = FetchType.LAZY)
     private User user;
+
+
+    // Add these two fields; one will be null depending on context
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "group_id")
+    private Group group= null; // For group posts, this will reference the group
+
+    // @ManyToOne(fetch = FetchType.LAZY)
+    // @JoinColumn(name = "page_id")
+    // private Page page;
 
     private String content;
     private LocalDateTime createdAt;
@@ -115,5 +128,12 @@ public class Post {
     }
     public void setParentPostId(Long parentPostId) {
         this.parentPostId = parentPostId;
+    }
+
+    public Group getGroup() {
+        return group;
+    }
+    public void setGroup(Group group) {
+        this.group = group;
     }
 }
