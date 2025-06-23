@@ -87,6 +87,11 @@ public class FeedAPIController {
         // 3) Build DTOs + compute a dynamic score for each
         List<FeedItemDto> scoredItems = buildFeedItemsWithDynamicScore(candidateIds, userId);
 
+        if (scoredItems.size() == 0) {
+            FeedPageResponseDto emptyPage = new FeedPageResponseDto(Collections.emptyList(), null);
+            return ResponseEntity.ok(emptyPage);
+        }
+
         // 4) Sort by (rankScore DESC, postId DESC)
         scoredItems.sort(
                 Comparator.comparing(FeedItemDto::getRankScore, Comparator.reverseOrder())
@@ -347,7 +352,7 @@ public class FeedAPIController {
                         count++;
                         if (count >= limit)
                             break;
-                        continue;    
+                        continue;
                     }
                 } catch (Exception e) {
                     // If parsing fails, skip recency filter for this item

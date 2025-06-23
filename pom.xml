@@ -113,11 +113,11 @@
 			<version>42.7.3</version>
 			<!-- Or latest -->
 		</dependency>
-		<dependency>
+		<!-- <dependency>
 			<groupId>io.github.cdimascio</groupId>
 			<artifactId>java-dotenv</artifactId>
 			<version>5.2.2</version>
-		</dependency>
+		</dependency> -->
 		<!-- cloudinary -->
 		<dependency>
 			<groupId>com.cloudinary</groupId>
