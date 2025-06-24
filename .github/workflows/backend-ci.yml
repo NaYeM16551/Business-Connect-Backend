@@ -1,4 +1,4 @@
-name: Backend CI
+name: Backend CI/CD
 
 on:
   push:
@@ -24,6 +24,31 @@ jobs:
       - name: Build Docker image
         run: docker build -t backend-ci-test .
 
-      # (Optional) If you have tests, add a step to run them here, for example:
-      # - name: Run tests
-      #   run: docker run backend-ci-test npm test
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy backend repo to VM via SSH
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.AZURE_VM_IP }}
+          username: azureuser
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
+          source: "."
+          target: "~/Business-Connect-Backend"
+          rm: false
+
+      - name: Run Docker Compose on VM via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AZURE_VM_IP }}
+          username: azureuser
+          key: ${{ secrets.AZURE_VM_SSH_KEY }}
+          script: |
+            cd ~/Business-Connect
+            docker compose up -d --build backend
+
