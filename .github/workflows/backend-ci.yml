@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - main
+      - dockerSetup
   pull_request:
     branches:
       - main
+      - dockerSetup
 
 jobs:
   build:
