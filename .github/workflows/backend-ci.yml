@@ -39,7 +39,7 @@ jobs:
           username: azureuser
           key: ${{ secrets.AZURE_VM_SSH_KEY }}
           source: "."
-          target: "~/Business-Connect-Backend"
+          target: "~/Business-Connect/Business-Connect-Backend"
           rm: false
 
       - name: Run Docker Compose on VM via SSH
