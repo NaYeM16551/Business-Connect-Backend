@@ -19,7 +19,8 @@ public class WebConfig {
                                 "http://localhost:5173", // Vite
                                 "https://your-frontend.com", // production domain
                                 "http://localhost:8081/",
-                                "http://57.159.26.157:8081/")
+                                "http://57.159.26.157:8081/",
+                                "http://business-connect.live:8081/")
                         .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                         .allowedHeaders("Authorization", "Content-Type", "X-Requested-With") // <-- allow these
                         .exposedHeaders("Authorization") // if you ever need to read it client-side
