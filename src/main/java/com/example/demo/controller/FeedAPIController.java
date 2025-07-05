@@ -21,12 +21,16 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.demo.dto.Feed.CursorDto;
 import com.example.demo.dto.Feed.FeedItemDto;
 import com.example.demo.dto.Feed.FeedPageResponseDto;
+import com.example.demo.service.RedisHealthService;
 
 @RestController
 @RequestMapping("/api/v1/feed")
 public class FeedAPIController {
 
     private final StringRedisTemplate redis;
+
+    @Autowired
+    private RedisHealthService redisHealthService;
 
     // How many candidates to retrieve from Redis by timestamp, before dynamic
     // re‐scoring
@@ -220,7 +224,7 @@ public class FeedAPIController {
                     System.err.println("Error fetching post hash for " + pid + ": " + e.getMessage());
                     continue;
                 }
-                
+
                 if (postHash == null || postHash.isEmpty()) {
                     continue;
                 }
@@ -230,7 +234,7 @@ public class FeedAPIController {
                 if (createdAtStr == null || createdAtStr.isBlank()) {
                     continue;
                 }
-                
+
                 long createdAtMs;
                 try {
                     createdAtMs = Instant.parse(createdAtStr).toEpochMilli();
@@ -256,7 +260,7 @@ public class FeedAPIController {
                     // Skip this post if authorId is invalid
                     continue;
                 }
-                
+
                 long interactionCnt = 0L;
                 if (authorId != null && !authorId.equals(userId)) {
                     try {
@@ -288,7 +292,8 @@ public class FeedAPIController {
                 double interactionBoost = interactionCnt >= 0 ? Math.log(1 + interactionCnt) : -5;
 
                 // 5) finalScore
-                double finalScore = 0.6 * recencyScore + 0.3 * engagementScore + 0.1 * mediaBoost + 0.2 * interactionBoost;
+                double finalScore = 0.6 * recencyScore + 0.3 * engagementScore + 0.1 * mediaBoost
+                        + 0.2 * interactionBoost;
 
                 System.out.printf(" userId %d:,Post %d: , finalScore=%.4f, interactionBoost=%f\n",
                         userId, pid, finalScore, interactionBoost);
@@ -461,5 +466,33 @@ public class FeedAPIController {
             System.err.println("Error building next cursor: " + e.getMessage());
         }
         return null;
+    }
+
+    // Helper method for safe Redis operations
+    private <T> T safeRedisOperation(java.util.function.Supplier<T> operation, T defaultValue) {
+        if (!redisHealthService.isRedisHealthy()) {
+            System.err.println("Error reading from cache: Unable to connect to Redis");
+            return defaultValue;
+        }
+        try {
+            return operation.get();
+        } catch (Exception e) {
+            System.err.println("Error reading from cache: " + e.getMessage());
+            redisHealthService.forceHealthCheck();
+            return defaultValue;
+        }
+    }
+
+    private void safeRedisOperation(Runnable operation) {
+        if (!redisHealthService.isRedisHealthy()) {
+            System.err.println("Error writing to cache: Unable to connect to Redis");
+            return;
+        }
+        try {
+            operation.run();
+        } catch (Exception e) {
+            System.err.println("Error writing to cache: " + e.getMessage());
+            redisHealthService.forceHealthCheck();
+        }
     }
 }

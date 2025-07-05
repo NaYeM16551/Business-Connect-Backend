@@ -35,6 +35,7 @@ import com.example.demo.repository.Posts.PostLikeRepository;
 import com.example.demo.repository.Posts.PostMediaRepository;
 import com.example.demo.repository.Posts.PostRepository;
 import com.example.demo.service.CloudinaryService;
+import com.example.demo.service.RedisHealthService;
 
 import jakarta.annotation.PostConstruct;
 
@@ -63,38 +64,39 @@ public class PostService {
     @Autowired
     private StringRedisTemplate redisTemplate;
 
+    @Autowired
+    private RedisHealthService redisHealthService;
+
     private boolean isRedisAvailable = false;
 
     @PostConstruct
     public void checkRedisConnection() {
-        try {
-            // Simple Redis connectivity test
-            redisTemplate.opsForValue().set("health-check", "ok");
-            String result = redisTemplate.opsForValue().get("health-check");
-            if ("ok".equals(result)) {
-                isRedisAvailable = true;
-                System.out.println("✅ Redis connection successful");
-                redisTemplate.delete("health-check");
-            } else {
-                isRedisAvailable = false;
-                System.err.println("❌ Redis health check failed");
-            }
-        } catch (Exception e) {
-            isRedisAvailable = false;
-            System.err.println("❌ Redis connection failed: " + e.getMessage());
+        // Use the centralized health service
+        isRedisAvailable = redisHealthService.testRedisWithRetry(3);
+        if (isRedisAvailable) {
+            System.out.println("✅ Redis connection successful via health service");
+        } else {
+            System.err.println("❌ Redis connection failed after retries");
             System.err.println("Service will continue without Redis cache");
         }
     }
 
     // Helper method to safely execute Redis operations
     private void safeRedisOperation(Runnable operation) {
-        if (!isRedisAvailable)
+        // Check health before operations
+        if (!redisHealthService.isRedisHealthy()) {
+            isRedisAvailable = false;
             return;
+        }
+
         try {
             operation.run();
+            isRedisAvailable = true; // Mark as available on success
         } catch (Exception e) {
             System.err.println("❌ Redis operation failed: " + e.getMessage());
             isRedisAvailable = false; // Mark as unavailable for future operations
+            // Force a health check to update the central service
+            redisHealthService.forceHealthCheck();
         }
     }
 
@@ -163,9 +165,9 @@ public class PostService {
 
         // Try to trigger event listener, but don't fail if Redis is down
         // try {
-        //     triggerEventListerner(post);
+        // triggerEventListerner(post);
         // } catch (Exception e) {
-        //     System.err.println("Event trigger failed: " + e.getMessage());
+        // System.err.println("Event trigger failed: " + e.getMessage());
         // }
         triggerEventListerner(post);
 
