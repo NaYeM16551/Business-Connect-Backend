@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -74,20 +75,31 @@ public class GroupController {
 
     // Search groups
     @GetMapping("/search")
-    public ResponseEntity<List<GroupResponse>> searchGroups(@RequestParam String query, Authentication authentication) {
+    public ResponseEntity<?> searchGroups(@RequestParam String query, Authentication authentication) {
         try {
             Long userId = Long.valueOf(authentication.getName());
-            System.out.println("Searching groups with query: " + query + " for user: " + userId);
+            System.out.println("Searching groups with query: '" + query + "' for user: " + userId);
+
             List<GroupResponse> groups = groupService.searchGroups(query, userId);
             System.out.println("Found " + groups.size() + " groups");
+
             return ResponseEntity.ok(groups);
+
         } catch (NumberFormatException e) {
             System.err.println("Invalid user ID format: " + e.getMessage());
-            return ResponseEntity.badRequest().body(null);
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Invalid user authentication", "message", e.getMessage()));
+
+        } catch (RuntimeException e) {
+            System.err.println("Runtime error searching groups: " + e.getMessage());
+            return ResponseEntity.status(500)
+                    .body(Map.of("error", "Internal server error", "message", e.getMessage()));
+
         } catch (Exception e) {
-            System.err.println("Error searching groups: " + e.getMessage());
+            System.err.println("Unexpected error searching groups: " + e.getMessage());
             e.printStackTrace();
-            return ResponseEntity.status(500).body(null);
+            return ResponseEntity.status(500)
+                    .body(Map.of("error", "Unexpected error", "message", "An unexpected error occurred"));
         }
     }
 
