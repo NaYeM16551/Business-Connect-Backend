@@ -63,6 +63,7 @@ public class GroupController {
             Long userId = Long.valueOf(authentication.getName());
             System.out.println("userId: " + userId);
             List<GroupResponse> groups = groupService.getGroupsByUserId(userId);
+            System.out.println("Groups fetched: " + groups);
             return ResponseEntity.ok(groups);
         } catch (NumberFormatException e) {
             // Handle case where authentication name is not a valid Long
