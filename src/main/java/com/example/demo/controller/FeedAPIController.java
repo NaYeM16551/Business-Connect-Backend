@@ -57,7 +57,7 @@ public class FeedAPIController {
      * Returns a page of feed items for the currently authenticated user.
      *
      * 1) Fetch a pool of recent posts by *raw timestamp*.
-     * 2) Compute a dynamic “rankScore” in‐Java.
+     * 2) Compute a dynamic "rankScore" in‐Java.
      * 3) Sort by (rankScore DESC, postId DESC).
      * 4) Apply dynamic cursor & limit in‐memory.
      * 5) Return result + nextCursor.
@@ -70,48 +70,70 @@ public class FeedAPIController {
             @RequestParam(value = "limit", defaultValue = "20") int limit,
             Authentication authentication) {
 
-        Long userId = Long.valueOf(authentication.getName());
-        String cacheKey = buildCacheKey(userId, cursorScore, cursorPostId, limit);
+        try {
+            // Validate authentication
+            if (authentication == null || authentication.getName() == null) {
+                return ResponseEntity.badRequest().body(new FeedPageResponseDto(Collections.emptyList(), null));
+            }
 
-        // 1) Try cached page
-        FeedPageResponseDto cachedPage = getCachedFeedPage(cacheKey);
-        if (cachedPage != null) {
-            return ResponseEntity.ok(cachedPage);
+            Long userId;
+            try {
+                userId = Long.valueOf(authentication.getName());
+            } catch (NumberFormatException e) {
+                return ResponseEntity.badRequest().body(new FeedPageResponseDto(Collections.emptyList(), null));
+            }
+
+            // Validate limit parameter
+            if (limit <= 0 || limit > 100) {
+                limit = 20; // Default to 20 if invalid
+            }
+
+            String cacheKey = buildCacheKey(userId, cursorScore, cursorPostId, limit);
+
+            // 1) Try cached page
+            FeedPageResponseDto cachedPage = getCachedFeedPage(cacheKey);
+            if (cachedPage != null) {
+                return ResponseEntity.ok(cachedPage);
+            }
+            System.out.println("Cache miss for key: " + cacheKey);
+
+            // 2) Fetch a pool of candidates by *raw timestamp* (desc)
+            String zsetKey = "feed:user:" + userId;
+            Set<String> candidateIds = getFeedPostIds(zsetKey, CANDIDATE_POOL_SIZE);
+
+            // 3) Build DTOs + compute a dynamic score for each
+            List<FeedItemDto> scoredItems = buildFeedItemsWithDynamicScore(candidateIds, userId);
+
+            if (scoredItems.size() == 0) {
+                FeedPageResponseDto emptyPage = new FeedPageResponseDto(Collections.emptyList(), null);
+                return ResponseEntity.ok(emptyPage);
+            }
+
+            // 4) Sort by (rankScore DESC, postId DESC)
+            scoredItems.sort(
+                    Comparator.comparing(FeedItemDto::getRankScore, Comparator.reverseOrder())
+                            .thenComparing(FeedItemDto::getPostId, Comparator.reverseOrder()));
+
+            // 5) Apply USER'S dynamic cursor entirely in memory
+            List<FeedItemDto> pageItems = applyCursorAndLimit(scoredItems, cursorScore, cursorPostId, limit, lastTime);
+
+            // 6) Build nextCursor from the last item we returned
+            CursorDto nextCursor = buildNextCursor(pageItems);
+
+            if (nextCursor != null)
+                System.out.println(nextCursor.getLastDateTime());
+
+            FeedPageResponseDto page = new FeedPageResponseDto(pageItems, nextCursor);
+
+            // 7) Cache it for a short TTL
+            cacheFeedPage(cacheKey, page);
+
+            return ResponseEntity.ok(page);
+        } catch (Exception e) {
+            System.err.println("Error in getFeed: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.ok(new FeedPageResponseDto(Collections.emptyList(), null));
         }
-        System.out.println("Cache miss for key: " + cacheKey);
-
-        // 2) Fetch a pool of candidates by *raw timestamp* (desc)
-        String zsetKey = "feed:user:" + userId;
-        Set<String> candidateIds = getFeedPostIds(zsetKey, CANDIDATE_POOL_SIZE);
-
-        // 3) Build DTOs + compute a dynamic score for each
-        List<FeedItemDto> scoredItems = buildFeedItemsWithDynamicScore(candidateIds, userId);
-
-        if (scoredItems.size() == 0) {
-            FeedPageResponseDto emptyPage = new FeedPageResponseDto(Collections.emptyList(), null);
-            return ResponseEntity.ok(emptyPage);
-        }
-
-        // 4) Sort by (rankScore DESC, postId DESC)
-        scoredItems.sort(
-                Comparator.comparing(FeedItemDto::getRankScore, Comparator.reverseOrder())
-                        .thenComparing(FeedItemDto::getPostId, Comparator.reverseOrder()));
-
-        // 5) Apply USER’S dynamic cursor entirely in memory
-        List<FeedItemDto> pageItems = applyCursorAndLimit(scoredItems, cursorScore, cursorPostId, limit, lastTime);
-
-        // 6) Build nextCursor from the last item we returned
-        CursorDto nextCursor = buildNextCursor(pageItems);
-
-        if (nextCursor != null)
-            System.out.println(nextCursor.getLastDateTime());
-
-        FeedPageResponseDto page = new FeedPageResponseDto(pageItems, nextCursor);
-
-        // 7) Cache it for a short TTL
-        cacheFeedPage(cacheKey, page);
-
-        return ResponseEntity.ok(page);
     }
 
     // ———————————————————————————————
@@ -124,15 +146,23 @@ public class FeedAPIController {
     }
 
     private FeedPageResponseDto getCachedFeedPage(String cacheKey) {
-        String cachedJson = redis.opsForValue().get(cacheKey);
-        if (cachedJson != null) {
-            return FeedPageResponseDto.fromJson(cachedJson);
+        try {
+            String cachedJson = redis.opsForValue().get(cacheKey);
+            if (cachedJson != null && !cachedJson.isBlank()) {
+                return FeedPageResponseDto.fromJson(cachedJson);
+            }
+        } catch (Exception e) {
+            System.err.println("Error reading from cache: " + e.getMessage());
         }
         return null;
     }
 
     private void cacheFeedPage(String cacheKey, FeedPageResponseDto page) {
-        redis.opsForValue().set(cacheKey, page.toJson(), Duration.ofSeconds(15));
+        try {
+            redis.opsForValue().set(cacheKey, page.toJson(), Duration.ofSeconds(15));
+        } catch (Exception e) {
+            System.err.println("Error caching feed page: " + e.getMessage());
+        }
     }
 
     // ———————————————————————————————
@@ -144,11 +174,16 @@ public class FeedAPIController {
      * We store each post's createdAt epoch‐ms as the ZSET score.
      */
     private Set<String> getFeedPostIds(String zsetKey, int candidatePoolSize) {
-        Set<String> postIdStrings = redis.opsForZSet().reverseRange(zsetKey, 0, candidatePoolSize - 1);
-        if (postIdStrings == null) {
+        try {
+            Set<String> postIdStrings = redis.opsForZSet().reverseRange(zsetKey, 0, candidatePoolSize - 1);
+            if (postIdStrings == null) {
+                return Collections.emptySet();
+            }
+            return postIdStrings;
+        } catch (Exception e) {
+            System.err.println("Error fetching feed post IDs: " + e.getMessage());
             return Collections.emptySet();
         }
-        return postIdStrings;
     }
 
     // ———————————————————————————————
@@ -169,136 +204,165 @@ public class FeedAPIController {
         List<FeedItemDto> items = new ArrayList<>();
 
         for (String pidStr : postIdStrings) {
-            Long pid;
             try {
-                pid = Long.valueOf(pidStr);
-            } catch (NumberFormatException ex) {
-                continue; // skip invalid
-            }
+                Long pid;
+                try {
+                    pid = Long.valueOf(pidStr);
+                } catch (NumberFormatException ex) {
+                    continue; // skip invalid
+                }
 
-            String postKey = "post:" + pid;
-            Map<Object, Object> postHash = redis.opsForHash().entries(postKey);
-            if (postHash == null || postHash.isEmpty()) {
-                continue;
-            }
+                String postKey = "post:" + pid;
+                Map<Object, Object> postHash;
+                try {
+                    postHash = redis.opsForHash().entries(postKey);
+                } catch (Exception e) {
+                    System.err.println("Error fetching post hash for " + pid + ": " + e.getMessage());
+                    continue;
+                }
+                
+                if (postHash == null || postHash.isEmpty()) {
+                    continue;
+                }
 
-            // 1) Extract fields
-            String createdAtStr = (String) postHash.get("createdAt");
-            long createdAtMs;
-            try {
-                createdAtMs = Instant.parse(createdAtStr).toEpochMilli();
-            } catch (Exception e) {
-                continue; // skip if unparsable
-            }
+                // 1) Extract fields
+                String createdAtStr = (String) postHash.get("createdAt");
+                if (createdAtStr == null || createdAtStr.isBlank()) {
+                    continue;
+                }
+                
+                long createdAtMs;
+                try {
+                    createdAtMs = Instant.parse(createdAtStr).toEpochMilli();
+                } catch (Exception e) {
+                    continue; // skip if unparsable
+                }
 
-            long likeCount = safeLong(postHash.get("likeCount"));
-            long commentCount = safeLong(postHash.get("commentCount"));
-            long shareCount = safeLong(postHash.get("shareCount"));
+                long likeCount = safeLong(postHash.get("likeCount"));
+                long commentCount = safeLong(postHash.get("commentCount"));
+                long shareCount = safeLong(postHash.get("shareCount"));
 
-            String mediaCsv = (String) postHash.get("mediaUrls");
-            boolean hasMedia = (mediaCsv != null && !mediaCsv.isBlank());
+                String mediaCsv = (String) postHash.get("mediaUrls");
+                boolean hasMedia = (mediaCsv != null && !mediaCsv.isBlank());
 
-            // 1.5) Fetch interaction count between user and author
-            Long authorId = null;
-            try {
-                authorId = Long.valueOf((String) postHash.get("authorId"));
-            } catch (Exception e) {
-                /* ignore */ }
-            long interactionCnt = 0L;
-            if (authorId != null && !authorId.equals(userId)) {
-                String interactionKey = "interaction:" + userId + "," + authorId;
-                String cntStr = redis.opsForValue().get(interactionKey);
-                if (cntStr != null && !cntStr.isBlank()) {
-                    interactionCnt = Long.parseLong(cntStr);
+                // 1.5) Fetch interaction count between user and author
+                Long authorId = null;
+                try {
+                    String authorIdStr = (String) postHash.get("authorId");
+                    if (authorIdStr != null && !authorIdStr.isBlank()) {
+                        authorId = Long.valueOf(authorIdStr);
+                    }
+                } catch (Exception e) {
+                    // Skip this post if authorId is invalid
+                    continue;
+                }
+                
+                long interactionCnt = 0L;
+                if (authorId != null && !authorId.equals(userId)) {
+                    try {
+                        String interactionKey = "interaction:" + userId + "," + authorId;
+                        String cntStr = redis.opsForValue().get(interactionKey);
+                        if (cntStr != null && !cntStr.isBlank()) {
+                            interactionCnt = Long.parseLong(cntStr);
+                        } else {
+                            interactionCnt = -10L; // Default to 0 if not found
+                        }
+                    } catch (Exception e) {
+                        interactionCnt = -10L;
+                    }
+                }
+
+                // 2) Compute recencyScore = exp(-hoursAgo/24)
+                double hoursAgo = (nowMs - createdAtMs) / 3_600_000.0;
+                double recencyScore = Math.exp(-hoursAgo / 24.0);
+
+                // 3) Compute engagementScore
+                double engagementScore = Math.log(1 + likeCount)
+                        + 0.5 * Math.log(1 + commentCount)
+                        + 0.8 * Math.log(1 + shareCount);
+
+                // 4) mediaBoost
+                double mediaBoost = hasMedia ? 1 : 0.0;
+
+                // 4.5) interactionBoost
+                double interactionBoost = interactionCnt >= 0 ? Math.log(1 + interactionCnt) : -5;
+
+                // 5) finalScore
+                double finalScore = 0.6 * recencyScore + 0.3 * engagementScore + 0.1 * mediaBoost + 0.2 * interactionBoost;
+
+                System.out.printf(" userId %d:,Post %d: , finalScore=%.4f, interactionBoost=%f\n",
+                        userId, pid, finalScore, interactionBoost);
+
+                // 6) Build the DTO and set rankScore
+                FeedItemDto dto = new FeedItemDto();
+                dto.setPostId(pid);
+                dto.setRankScore(finalScore);
+
+                // 7) Populate the rest of dto from hash
+                dto.setAuthorId(authorId);
+                dto.setAuthorName((String) postHash.get("authorName"));
+                dto.setAuthorAvatarUrl((String) postHash.get("authorAvatarUrl"));
+                dto.setContentSnippet((String) postHash.get("content"));
+                dto.setCreatedAt(createdAtStr);
+
+                // Parent info for shares (null check)
+                String parentPostIdStr = (String) postHash.get("parentPostId");
+                if (parentPostIdStr != null && !parentPostIdStr.isBlank()) {
+                    try {
+                        dto.setParentPostId(Long.valueOf(parentPostIdStr));
+                    } catch (Exception e) {
+                        dto.setParentPostId(null);
+                    }
+                }
+                String parentAuthorIdStr = (String) postHash.get("parentAuthorId");
+                if (parentAuthorIdStr != null && !parentAuthorIdStr.isBlank()) {
+                    try {
+                        dto.setParentAuthorId(Long.valueOf(parentAuthorIdStr));
+                    } catch (Exception e) {
+                        dto.setParentAuthorId(null);
+                    }
+                }
+                String parentAuthorName = (String) postHash.get("parentAuthorName");
+                if (parentAuthorName != null)
+                    dto.setParentAuthorName(parentAuthorName);
+                String parentAuthorAvatarUrl = (String) postHash.get("parentAuthorAvatarUrl");
+                if (parentAuthorAvatarUrl != null)
+                    dto.setParentAuthorAvatarUrl(parentAuthorAvatarUrl);
+
+                String parentPostContentSnippet = (String) postHash.get("parentPostContentSnippet");
+                if (parentPostContentSnippet != null)
+                    dto.setParentPostContentSnippet(parentPostContentSnippet);
+
+                List<String> mediaList;
+                if (mediaCsv == null || mediaCsv.isEmpty()) {
+                    mediaList = List.of();
                 } else {
-                    interactionCnt = -10L; // Default to 0 if not found
+                    mediaList = List.of(mediaCsv.split(","));
                 }
-            }
+                dto.setMediaUrls(mediaList);
 
-            // 2) Compute recencyScore = exp(-hoursAgo/24)
-            double hoursAgo = (nowMs - createdAtMs) / 3_600_000.0;
-            double recencyScore = Math.exp(-hoursAgo / 24.0);
+                dto.setLikeCount(likeCount);
+                dto.setCommentCount(commentCount);
+                dto.setShareCount(shareCount);
 
-            // 3) Compute engagementScore
-            double engagementScore = Math.log(1 + likeCount)
-                    + 0.5 * Math.log(1 + commentCount)
-                    + 0.8 * Math.log(1 + shareCount);
-
-            // 4) mediaBoost
-            double mediaBoost = hasMedia ? 1 : 0.0;
-
-            // 4.5) interactionBoost
-            double interactionBoost = interactionCnt >= 0 ? Math.log(1 + interactionCnt) : -5;
-
-            // 5) finalScore
-            double finalScore = 0.6 * recencyScore + 0.3 * engagementScore + 0.1 * mediaBoost + 0.2 * interactionBoost;
-
-            System.out.printf(" userId %d:,Post %d: , finalScore=%.4f, interactionBoost=%f\n",
-                    userId, pid, finalScore, interactionBoost);
-
-            // 6) Build the DTO and set rankScore
-            FeedItemDto dto = new FeedItemDto();
-            dto.setPostId(pid);
-            dto.setRankScore(finalScore);
-
-            // 7) Populate the rest of dto from hash
-            dto.setAuthorId(Long.valueOf((String) postHash.get("authorId")));
-            dto.setAuthorName((String) postHash.get("authorName"));
-            dto.setAuthorAvatarUrl((String) postHash.get("authorAvatarUrl"));
-            dto.setContentSnippet((String) postHash.get("content"));
-            dto.setCreatedAt(createdAtStr);
-
-            // Parent info for shares (null check)
-            String parentPostIdStr = (String) postHash.get("parentPostId");
-            if (parentPostIdStr != null && !parentPostIdStr.isBlank()) {
+                // 8) Fetch this user's reaction from post:<pid>:likes
                 try {
-                    dto.setParentPostId(Long.valueOf(parentPostIdStr));
+                    String likeHashKey = "post:" + pid + ":likes";
+                    Object likeTypeObj = redis.opsForHash().get(likeHashKey, userId.toString());
+                    if (likeTypeObj != null) {
+                        dto.setMyLikeType(Long.parseLong((String) likeTypeObj));
+                    } else {
+                        dto.setMyLikeType(0L);
+                    }
                 } catch (Exception e) {
-                    dto.setParentPostId(null);
+                    dto.setMyLikeType(0L);
                 }
+
+                items.add(dto);
+            } catch (Exception e) {
+                System.err.println("Error processing post " + pidStr + ": " + e.getMessage());
+                continue; // Skip this post and continue with others
             }
-            String parentAuthorIdStr = (String) postHash.get("parentAuthorId");
-            if (parentAuthorIdStr != null && !parentAuthorIdStr.isBlank()) {
-                try {
-                    dto.setParentAuthorId(Long.valueOf(parentAuthorIdStr));
-                } catch (Exception e) {
-                    dto.setParentAuthorId(null);
-                }
-            }
-            String parentAuthorName = (String) postHash.get("parentAuthorName");
-            if (parentAuthorName != null)
-                dto.setParentAuthorName(parentAuthorName);
-            String parentAuthorAvatarUrl = (String) postHash.get("parentAuthorAvatarUrl");
-            if (parentAuthorAvatarUrl != null)
-                dto.setParentAuthorAvatarUrl(parentAuthorAvatarUrl);
-
-            String parentPostContentSnippet = (String) postHash.get("parentPostContentSnippet");
-            if (parentPostContentSnippet != null)
-                dto.setParentPostContentSnippet(parentPostContentSnippet);
-
-            List<String> mediaList;
-            if (mediaCsv == null || mediaCsv.isEmpty()) {
-                mediaList = List.of();
-            } else {
-                mediaList = List.of(mediaCsv.split(","));
-            }
-            dto.setMediaUrls(mediaList);
-
-            dto.setLikeCount(likeCount);
-            dto.setCommentCount(commentCount);
-            dto.setShareCount(shareCount);
-
-            // 8) Fetch this user’s reaction from post:<pid>:likes
-            String likeHashKey = "post:" + pid + ":likes";
-            Object likeTypeObj = redis.opsForHash().get(likeHashKey, userId.toString());
-            if (likeTypeObj != null) {
-                dto.setMyLikeType(Long.parseLong((String) likeTypeObj));
-            } else {
-                dto.setMyLikeType(0L);
-            }
-
-            // dto.setIsSharedByMe(false);
-            items.add(dto);
         }
 
         return items;
@@ -340,38 +404,43 @@ public class FeedAPIController {
         }
 
         for (FeedItemDto dto : sortedItems) {
-            double score = dto.getRankScore();
-            long pid = dto.getPostId();
+            try {
+                double score = dto.getRankScore();
+                long pid = dto.getPostId();
 
-            // Session recency: only add if createdAt > lastTime
-            if (useSessionRecency && i1 != null) {
-                try {
-                    Instant i2 = Instant.parse(dto.getCreatedAt());
-                    if (i2.isAfter(i1)) {
-                        page.add(dto);
-                        count++;
-                        if (count >= limit)
-                            break;
+                // Session recency: only add if createdAt > lastTime
+                if (useSessionRecency && i1 != null) {
+                    try {
+                        Instant i2 = Instant.parse(dto.getCreatedAt());
+                        if (i2.isAfter(i1)) {
+                            page.add(dto);
+                            count++;
+                            if (count >= limit)
+                                break;
+                            continue;
+                        }
+                    } catch (Exception e) {
+                        // If parsing fails, skip recency filter for this item
+                    }
+                }
+
+                // If we have a cursor, skip until we find items strictly "after" the cursor
+                if (cursorScore != null && cursorPostId != null) {
+                    if ((score >= cursorScore || pid == cursorPostId)) {
+                        continue;
+                    } else if (score == cursorScore && pid <= cursorPostId) {
                         continue;
                     }
-                } catch (Exception e) {
-                    // If parsing fails, skip recency filter for this item
                 }
-            }
 
-            // If we have a cursor, skip until we find items strictly "after" the cursor
-            if (cursorScore != null && cursorPostId != null) {
-                if ((score >= cursorScore || pid == cursorPostId)) {
-                    continue;
-                } else if (score == cursorScore && pid <= cursorPostId) {
-                    continue;
-                }
+                page.add(dto);
+                count++;
+                if (count >= limit)
+                    break;
+            } catch (Exception e) {
+                System.err.println("Error processing item in cursor: " + e.getMessage());
+                continue;
             }
-
-            page.add(dto);
-            count++;
-            if (count >= limit)
-                break;
         }
 
         return page;
@@ -381,11 +450,15 @@ public class FeedAPIController {
     // 5) BUILD NEXT CURSOR FROM LAST ITEM
     // ———————————————————————————————
     private CursorDto buildNextCursor(List<FeedItemDto> items) {
-        if (!items.isEmpty()) {
-            FeedItemDto lastItem = items.get(items.size() - 1);
-            String lastTime = items.get(0).getCreatedAt();
-            // Keep it as a Double
-            return new CursorDto(lastItem.getRankScore() - 0.01, lastItem.getPostId(), lastTime);
+        try {
+            if (!items.isEmpty()) {
+                FeedItemDto lastItem = items.get(items.size() - 1);
+                String lastTime = items.get(0).getCreatedAt();
+                // Keep it as a Double
+                return new CursorDto(lastItem.getRankScore() - 0.01, lastItem.getPostId(), lastTime);
+            }
+        } catch (Exception e) {
+            System.err.println("Error building next cursor: " + e.getMessage());
         }
         return null;
     }
