@@ -220,6 +220,11 @@ public class GroupService {
         Group group = groupRepo.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group not found"));
 
+        if (group.getOwner() == null) {
+            System.err.println("Group with id " + groupId + " has null owner");
+            throw new IllegalStateException("Group owner is missing");
+        }
+
         GroupResponse response = new GroupResponse();
         response.setId(group.getId());
         response.setName(group.getName());
@@ -247,7 +252,19 @@ public class GroupService {
     public List<GroupResponse> getGroupsByUserId(Long userId) {
         List<GroupMembership> memberships = membershipRepo.findByUserId(userId);
         return memberships.stream()
-                .map(membership -> getGroupById(membership.getGroup().getId(), userId))
+                .map(membership -> {
+                    if (membership.getGroup() == null) {
+                        System.err.println("Membership with null group for userId: " + userId);
+                        return null;
+                    }
+                    try {
+                        return getGroupById(membership.getGroup().getId(), userId);
+                    } catch (Exception e) {
+                        System.err.println("Error in getGroupById: " + e.getMessage());
+                        return null;
+                    }
+                })
+                .filter(response -> response != null)
                 .collect(Collectors.toList());
     }
 
