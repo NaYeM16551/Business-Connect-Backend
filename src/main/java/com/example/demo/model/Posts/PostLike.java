@@ -8,6 +8,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
@@ -20,15 +21,18 @@ public class PostLike {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "post_id")
     private Post post;
 
     private LocalDateTime likedAt;
 
-    private int likeType;//0 for no-react,,1--->love,2-->like,3--->wow,4--->angry,5--->haha
+    private int likeType;// 0 for no-react,,1--->love,2-->like,3--->wow,4--->angry,5--->haha
     // Getters and Setters
+
     public Long getId() {
         return id;
     }
@@ -65,8 +69,7 @@ public class PostLike {
         this.likeType = likeType;
     }
 
-    public int getLikeType()
-    {
+    public int getLikeType() {
         return this.likeType;
     }
 }

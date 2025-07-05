@@ -114,6 +114,43 @@ public class PostService {
     }
 
     @Transactional
+    public Long createGroupPost(String content, MultipartFile[] files, Long userId, Long groupId) throws IOException {
+        System.out.println("Creating group post for user ID: " + userId + " in group ID: " + groupId);
+
+        Post post = new Post();
+        post.setContent(content);
+        post.setCreatedAt(java.time.LocalDateTime.now());
+
+        // Set User (only set ID for reference)
+        User user = new User();
+        user.setId(userId);
+        post.setUser(user);
+
+        // Set Group (only set ID for reference)
+        com.example.demo.model.Groups.Group group = new com.example.demo.model.Groups.Group();
+        group.setId(groupId);
+        post.setGroup(group);
+
+        post = postRepo.save(post);
+
+        if (files != null && files.length > 0) {
+            for (MultipartFile file : files) {
+                String url = cloudinaryService.uploadFile(file);
+                System.out.println("Uploaded file URL: " + url);
+
+                PostMedia media = new PostMedia();
+                media.setMediaUrl(url);
+                media.setMediaType(file.getContentType());
+                media.setPost(post);
+
+                post.getMedia().add(media);
+            }
+        }
+        triggerEventListerner(post);
+        return post.getId();
+    }
+
+    @Transactional
     public PostDto getPostsByPostId(Long postId) {
         Post post = postRepo.findByIdWithMedia(postId).orElse(null); // Standard method
         if (post == null) {
@@ -193,6 +230,22 @@ public class PostService {
 
         List<Post> posts = postRepo.getPostsByUserId(userId).orElse(Collections.emptyList());
         return posts.stream()
+                .map(this::convertToDto)
+                .toList();
+    }
+
+    public List<PostDto> getPostsByGroupId(Long groupId, int page, int size) {
+        // This would need a custom query in PostRepository
+        // For now, we'll get all posts and filter by group
+        List<Post> allPosts = postRepo.findAll();
+        List<Post> groupPosts = allPosts.stream()
+                .filter(post -> post.getGroup() != null && post.getGroup().getId().equals(groupId))
+                .sorted((p1, p2) -> p2.getCreatedAt().compareTo(p1.getCreatedAt()))
+                .skip(page * size)
+                .limit(size)
+                .toList();
+        
+        return groupPosts.stream()
                 .map(this::convertToDto)
                 .toList();
     }
