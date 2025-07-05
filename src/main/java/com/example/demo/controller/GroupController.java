@@ -59,9 +59,17 @@ public class GroupController {
     // Get all groups for a user
     @GetMapping("/my-groups")
     public ResponseEntity<List<GroupResponse>> getMyGroups(Authentication authentication) {
-        Long userId = Long.valueOf(authentication.getName());
-        List<GroupResponse> groups = groupService.getGroupsByUserId(userId);
-        return ResponseEntity.ok(groups);
+        try{
+            // Get user ID from authentication
+            Long userId = Long.valueOf(authentication.getName());
+            System.out.println("userId: " + userId);
+            List<GroupResponse> groups = groupService.getGroupsByUserId(userId);
+             return ResponseEntity.ok(groups);
+        } catch (NumberFormatException e) {
+            // Handle case where authentication name is not a valid Long
+            return ResponseEntity.badRequest().body(null);
+        }
+        
     }
 
     // Search groups
