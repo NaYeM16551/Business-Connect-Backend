@@ -282,6 +282,14 @@ public class GroupService {
 
             return groups.stream()
                     .map(group -> {
+                        if (group == null) {
+                            System.err.println("Null group found in search results");
+                            return null;
+                        }
+                        if (group.getOwner() == null) {
+                            System.err.println("Group with id " + group.getId() + " has null owner (search)");
+                            return null;
+                        }
                         try {
                             return getGroupById(group.getId(), userId);
                         } catch (Exception e) {
