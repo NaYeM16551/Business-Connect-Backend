@@ -162,11 +162,12 @@ public class PostService {
         }
 
         // Try to trigger event listener, but don't fail if Redis is down
-        try {
-            triggerEventListerner(post);
-        } catch (Exception e) {
-            System.err.println("Event trigger failed: " + e.getMessage());
-        }
+        // try {
+        //     triggerEventListerner(post);
+        // } catch (Exception e) {
+        //     System.err.println("Event trigger failed: " + e.getMessage());
+        // }
+        triggerEventListerner(post);
 
         return post.getId();
     }
