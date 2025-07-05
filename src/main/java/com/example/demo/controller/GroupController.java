@@ -6,7 +6,6 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -59,25 +58,36 @@ public class GroupController {
     @GetMapping("/my-groups")
     public ResponseEntity<List<GroupResponse>> getMyGroups(Authentication authentication) {
         System.out.println("Authentication: " + authentication);
-        try{
+        try {
             // Get user ID from authentication
             Long userId = Long.valueOf(authentication.getName());
             System.out.println("userId: " + userId);
             List<GroupResponse> groups = groupService.getGroupsByUserId(userId);
-             return ResponseEntity.ok(groups);
+            return ResponseEntity.ok(groups);
         } catch (NumberFormatException e) {
             // Handle case where authentication name is not a valid Long
             return ResponseEntity.badRequest().body(null);
         }
-        
+
     }
 
     // Search groups
     @GetMapping("/search")
     public ResponseEntity<List<GroupResponse>> searchGroups(@RequestParam String query, Authentication authentication) {
-        Long userId = Long.valueOf(authentication.getName());
-        List<GroupResponse> groups = groupService.searchGroups(query, userId);
-        return ResponseEntity.ok(groups);
+        try {
+            Long userId = Long.valueOf(authentication.getName());
+            System.out.println("Searching groups with query: " + query + " for user: " + userId);
+            List<GroupResponse> groups = groupService.searchGroups(query, userId);
+            System.out.println("Found " + groups.size() + " groups");
+            return ResponseEntity.ok(groups);
+        } catch (NumberFormatException e) {
+            System.err.println("Invalid user ID format: " + e.getMessage());
+            return ResponseEntity.badRequest().body(null);
+        } catch (Exception e) {
+            System.err.println("Error searching groups: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(null);
+        }
     }
 
     // Join a group
@@ -184,5 +194,19 @@ public class GroupController {
 
         List<com.example.demo.dto.Posts.PostDto> posts = postService.getPostsByGroupId(groupId, page, size);
         return ResponseEntity.ok(posts);
+    }
+
+    // Test endpoint for debugging
+    @GetMapping("/test")
+    public ResponseEntity<String> testEndpoint() {
+        try {
+            System.out.println("Groups test endpoint called");
+            List<GroupResponse> allGroups = groupService.searchGroups("", 1L); // Test with empty search
+            return ResponseEntity.ok("Groups service is working. Found groups: " + allGroups.size());
+        } catch (Exception e) {
+            System.err.println("Error in test endpoint: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(500).body("Error: " + e.getMessage());
+        }
     }
 }

@@ -252,12 +252,33 @@ public class GroupService {
     }
 
     public List<GroupResponse> searchGroups(String searchTerm, Long userId) {
-        // This would need a custom query in GroupRepository
-        // For now, returning all public groups
-        List<Group> groups = groupRepo.findByPrivacy(Group.Privacy.PUBLIC);
-        return groups.stream()
-                .map(group -> getGroupById(group.getId(), userId))
-                .collect(Collectors.toList());
+        try {
+            List<Group> groups;
+
+            if (searchTerm == null || searchTerm.trim().isEmpty()) {
+                // If no search term, return all public groups
+                groups = groupRepo.findByPrivacy(Group.Privacy.PUBLIC);
+            } else {
+                // Search by name or description in public groups only
+                groups = groupRepo.searchByNameOrDescriptionAndPrivacy(searchTerm.trim(), Group.Privacy.PUBLIC);
+            }
+
+            return groups.stream()
+                    .map(group -> {
+                        try {
+                            return getGroupById(group.getId(), userId);
+                        } catch (Exception e) {
+                            System.err.println("Error converting group to response: " + e.getMessage());
+                            return null;
+                        }
+                    })
+                    .filter(response -> response != null)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            System.err.println("Error in searchGroups: " + e.getMessage());
+            e.printStackTrace();
+            return List.of(); // Return empty list on error
+        }
     }
 
     public List<GroupMemberResponse> getGroupMembers(Long groupId, Long userId) {
