@@ -99,6 +99,7 @@ public class JwtFilter extends OncePerRequestFilter {
         }
 
         // 11) Continue down the filter chain
+        System.out.println("Continuing down the filter chain");
         filterChain.doFilter(request, response);
     }
 }
