@@ -32,6 +32,16 @@ public class FeedOrchestratorService {
         this.userRepo = userRepo;
     }
 
+    // Helper method to safely execute Redis operations
+    private void safeRedisOperation(Runnable operation) {
+        try {
+            operation.run();
+        } catch (Exception e) {
+            System.err.println("❌ Redis operation failed in FeedOrchestratorService: " + e.getMessage());
+            System.err.println("⚠️ Post creation will continue, but Redis storage may be incomplete");
+        }
+    }
+
     /**
      * Listens for any PostCreatedEvent (either a brand‐new post or a share) and
      * “fans out”:
@@ -44,9 +54,12 @@ public class FeedOrchestratorService {
      */
     @EventListener
     public void onPostCreated(PostCreatedEventDto event) {
+        System.out.println("🎯 FeedOrchestratorService received PostCreatedEvent for post ID: " + event.getPostId());
+
         Long postId = event.getPostId();
         Long authorId = event.getAuthorId();
         if (postId == null || authorId == null) {
+            System.err.println("❌ Invalid event: postId or authorId is null");
             return;
         }
 
@@ -59,33 +72,36 @@ public class FeedOrchestratorService {
         // 2) Build the single Redis Hash for this post (overwrite / upsert)
         String postKey = "post:" + postId;
         // authorId
-        redis.opsForHash().put(postKey, "authorId", authorId.toString());
+        safeRedisOperation(() -> redis.opsForHash().put(postKey, "authorId", authorId.toString()));
         // authorName (store empty string if null)
-        redis.opsForHash().put(postKey, "authorName", authorName == null ? "" : authorName);
+        safeRedisOperation(() -> redis.opsForHash().put(postKey, "authorName", authorName == null ? "" : authorName));
         // authorAvatarUrl (store empty string if null)
-        redis.opsForHash().put(postKey, "authorAvatarUrl", authorAvatar == null ? "" : authorAvatar);
+        safeRedisOperation(
+                () -> redis.opsForHash().put(postKey, "authorAvatarUrl", authorAvatar == null ? "" : authorAvatar));
         // snippet (content)
         String snippet = event.getContentSnippet();
-        redis.opsForHash().put(postKey, "content", snippet == null ? "" : snippet);
+        safeRedisOperation(() -> redis.opsForHash().put(postKey, "content", snippet == null ? "" : snippet));
         // createdAt: keep the original creation time for recency‐decay in the API
         Instant createdAt = event.getCreatedAt();
         String createdAtStr = (createdAt == null ? "" : createdAt.toString());
-        redis.opsForHash().put(postKey, "createdAt", createdAtStr);
+        safeRedisOperation(() -> redis.opsForHash().put(postKey, "createdAt", createdAtStr));
         // mediaUrls as CSV
         List<String> mediaUrls = event.getMediaUrls();
-        String csvMedia = "";
+        final String csvMedia;
         if (mediaUrls != null && !mediaUrls.isEmpty()) {
             csvMedia = mediaUrls.stream()
                     .filter(Objects::nonNull)
                     .collect(Collectors.joining(","));
+        } else {
+            csvMedia = "";
         }
-        redis.opsForHash().put(postKey, "mediaUrls", csvMedia);
+        safeRedisOperation(() -> redis.opsForHash().put(postKey, "mediaUrls", csvMedia));
         // initialize counts to zero if missing (upsert)
-        redis.opsForHash().putIfAbsent(postKey, "likeCount", "0");
-        redis.opsForHash().putIfAbsent(postKey, "commentCount", "0");
-        redis.opsForHash().putIfAbsent(postKey, "shareCount", "0");
+        safeRedisOperation(() -> redis.opsForHash().putIfAbsent(postKey, "likeCount", "0"));
+        safeRedisOperation(() -> redis.opsForHash().putIfAbsent(postKey, "commentCount", "0"));
+        safeRedisOperation(() -> redis.opsForHash().putIfAbsent(postKey, "shareCount", "0"));
         // optional TTL
-        redis.expire(postKey, Duration.ofDays(7));
+        safeRedisOperation(() -> redis.expire(postKey, Duration.ofDays(7)));
 
         // 3) Now fan out to each follower’s sorted set
         // Use post creation time as the score for new posts (recency/decay)
@@ -99,8 +115,10 @@ public class FeedOrchestratorService {
                 continue;
             String zsetKey = "feed:user:" + followerId;
             // ZADD feed:user:{followerId} {score} {postId}
-            redis.opsForZSet().add(zsetKey, postId.toString(), score);
-            System.out.println("Added post " + postId + " to follower " + followerId + "'s feed at score " + score);
+            safeRedisOperation(() -> redis.opsForZSet().add(zsetKey, postId.toString(), score));
+            System.out.println("✅ Added post " + postId + " to follower " + followerId + "'s feed at score " + score);
         }
+
+        System.out.println("🎉 Successfully processed PostCreatedEvent for post ID: " + postId);
     }
 }
