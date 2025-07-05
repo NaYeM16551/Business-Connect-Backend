@@ -36,6 +36,8 @@ import com.example.demo.repository.Posts.PostMediaRepository;
 import com.example.demo.repository.Posts.PostRepository;
 import com.example.demo.service.CloudinaryService;
 
+import jakarta.annotation.PostConstruct;
+
 @Service
 public class PostService {
 
@@ -61,23 +63,65 @@ public class PostService {
     @Autowired
     private StringRedisTemplate redisTemplate;
 
-    // redis template is used for caching posts and their metadata
-    private void updatePostCache(Post post) {
-        String postKey = "post:" + post.getId();
-        redisTemplate.opsForHash().put(postKey, "content", post.getContent());
-        // redisTemplate.opsForHash().put(postKey, "createdAt",
-        // post.getCreatedAt().toString());
-        // redisTemplate.opsForHash().put(postKey, "likeCount",
-        // String.valueOf(post.getLikes().size()));
-        // redisTemplate.opsForHash().put(postKey, "commentCount",
-        // String.valueOf(post.getComments().size()));
-        // redisTemplate.opsForHash().put(postKey, "shareCount",
-        // String.valueOf(post.getShareCount()));
-        if (post.getMedia() != null && !post.getMedia().isEmpty()) {
-            redisTemplate.opsForHash().put(postKey, "mediaUrls",
-                    post.getMedia().stream().map(PostMedia::getMediaUrl).collect(Collectors.joining(",")));
+    private boolean isRedisAvailable = false;
+
+    @PostConstruct
+    public void checkRedisConnection() {
+        try {
+            // Simple Redis connectivity test
+            redisTemplate.opsForValue().set("health-check", "ok");
+            String result = redisTemplate.opsForValue().get("health-check");
+            if ("ok".equals(result)) {
+                isRedisAvailable = true;
+                System.out.println("✅ Redis connection successful");
+                redisTemplate.delete("health-check");
+            } else {
+                isRedisAvailable = false;
+                System.err.println("❌ Redis health check failed");
+            }
+        } catch (Exception e) {
+            isRedisAvailable = false;
+            System.err.println("❌ Redis connection failed: " + e.getMessage());
+            System.err.println("Service will continue without Redis cache");
         }
-        redisTemplate.expire(postKey, Duration.ofDays(7));
+    }
+
+    // Helper method to safely execute Redis operations
+    private void safeRedisOperation(Runnable operation) {
+        if (!isRedisAvailable)
+            return;
+        try {
+            operation.run();
+        } catch (Exception e) {
+            System.err.println("❌ Redis operation failed: " + e.getMessage());
+            isRedisAvailable = false; // Mark as unavailable for future operations
+        }
+    }
+
+    // Helper method to safely execute Redis operations with return value
+    private <T> T safeRedisOperation(java.util.function.Supplier<T> operation, T defaultValue) {
+        if (!isRedisAvailable)
+            return defaultValue;
+        try {
+            return operation.get();
+        } catch (Exception e) {
+            System.err.println("❌ Redis operation failed: " + e.getMessage());
+            isRedisAvailable = false;
+            return defaultValue;
+        }
+    }
+
+    private void updatePostCache(Post post) {
+        safeRedisOperation(() -> {
+            String postKey = "post:" + post.getId();
+            redisTemplate.opsForHash().put(postKey, "content", post.getContent());
+            if (post.getMedia() != null && !post.getMedia().isEmpty()) {
+                redisTemplate.opsForHash().put(postKey, "mediaUrls",
+                        post.getMedia().stream().map(PostMedia::getMediaUrl).collect(Collectors.joining(",")));
+            }
+            redisTemplate.expire(postKey, Duration.ofDays(7));
+            System.out.println("✅ Redis cache updated for post: " + post.getId());
+        });
     }
 
     @Transactional
@@ -103,13 +147,27 @@ public class PostService {
 
                 PostMedia media = new PostMedia();
                 media.setMediaUrl(url);
-                media.setMediaType(file.getContentType()); // <-- Set mediaType!
+                media.setMediaType(file.getContentType());
                 media.setPost(post);
 
                 post.getMedia().add(media);
             }
         }
-        triggerEventListerner(post);
+
+        // Try to update cache, but don't fail if Redis is unavailable
+        try {
+            updatePostCache(post);
+        } catch (Exception e) {
+            System.err.println("Cache update failed, continuing without cache: " + e.getMessage());
+        }
+
+        // Try to trigger event listener, but don't fail if Redis is down
+        try {
+            triggerEventListerner(post);
+        } catch (Exception e) {
+            System.err.println("Event trigger failed: " + e.getMessage());
+        }
+
         return post.getId();
     }
 
@@ -159,7 +217,8 @@ public class PostService {
 
         // Check Redis cache first
         String postKey = "post:" + postId;
-        Map<Object, Object> cached = redisTemplate.opsForHash().entries(postKey);
+        Map<Object, Object> cached = safeRedisOperation(() -> redisTemplate.opsForHash().entries(postKey),
+                Collections.emptyMap());
 
         if (cached != null && !cached.isEmpty()) {
             // Build DTO from Redis hash
@@ -213,15 +272,17 @@ public class PostService {
         // }
 
         // save to Redis cache
-        redisTemplate.opsForHash().put(postKey, "content", postDto.getContent());
-        redisTemplate.opsForHash().put(postKey, "createdAt", postDto.getCreatedAt().toString());
-        redisTemplate.opsForHash().put(postKey, "likeCount", String.valueOf(postDto.getLikeCount()));
-        redisTemplate.opsForHash().put(postKey, "commentCount", String.valueOf(postDto.getCommentCount()));
-        redisTemplate.opsForHash().put(postKey, "shareCount", String.valueOf(postDto.getShareCount()));
-        redisTemplate.opsForHash().put(postKey, "mediaUrls", String.join(",", postDto.getMedia().stream()
-                .map(PostMediaDto::getMediaUrl)
-                .toList()));
-        redisTemplate.expire(postKey, Duration.ofDays(7));
+        safeRedisOperation(() -> {
+            redisTemplate.opsForHash().put(postKey, "content", postDto.getContent());
+            redisTemplate.opsForHash().put(postKey, "createdAt", postDto.getCreatedAt().toString());
+            redisTemplate.opsForHash().put(postKey, "likeCount", String.valueOf(postDto.getLikeCount()));
+            redisTemplate.opsForHash().put(postKey, "commentCount", String.valueOf(postDto.getCommentCount()));
+            redisTemplate.opsForHash().put(postKey, "shareCount", String.valueOf(postDto.getShareCount()));
+            redisTemplate.opsForHash().put(postKey, "mediaUrls", String.join(",", postDto.getMedia().stream()
+                    .map(PostMediaDto::getMediaUrl)
+                    .toList()));
+            redisTemplate.expire(postKey, Duration.ofDays(7));
+        });
 
         return postDto;
     }
@@ -244,7 +305,7 @@ public class PostService {
                 .skip(page * size)
                 .limit(size)
                 .toList();
-        
+
         return groupPosts.stream()
                 .map(this::convertToDto)
                 .toList();
@@ -313,7 +374,7 @@ public class PostService {
         // post.
         postRepo.delete(post);
         String postKey = "post:" + postId;
-        redisTemplate.delete(postKey);
+        safeRedisOperation(() -> redisTemplate.delete(postKey));
 
     }
 
@@ -349,13 +410,7 @@ public class PostService {
 
         System.out.println(likeHashKey);
         System.out.println(userIdStr);
-        Object oldTypeObj = null;
-        try {
-            oldTypeObj = redisTemplate.opsForHash().get(likeHashKey, userIdStr);
-        } catch (Exception e) {
-            System.out.println("hello world");
-            e.printStackTrace(); // <---- ADD THIS!
-        }
+        Object oldTypeObj = safeRedisOperation(() -> redisTemplate.opsForHash().get(likeHashKey, userIdStr), null);
         String oldTypeStr = (oldTypeObj == null) ? null : (String) oldTypeObj;
 
         // print to debug
@@ -370,9 +425,9 @@ public class PostService {
             // it.
             if (oldTypeStr != null) {
                 // 3a) Remove the field from the reaction‐hash
-                redisTemplate.opsForHash().delete(likeHashKey, userIdStr);
+                safeRedisOperation(() -> redisTemplate.opsForHash().delete(likeHashKey, userIdStr));
                 // 3b) Decrement the total likeCount in the main post hash
-                redisTemplate.opsForHash().increment(postKey, "likeCount", -1);
+                safeRedisOperation(() -> redisTemplate.opsForHash().increment(postKey, "likeCount", -1));
             }
             // If oldTypeStr was already null (no prior reaction), do nothing.
         } else {
@@ -446,7 +501,7 @@ public class PostService {
         // commenting owns post doesn't increment ranking
         String postKey = "post:" + postId;
         if (!userId.equals(post.getUser().getId()))
-            redisTemplate.opsForHash().increment(postKey, "commentCount", 1);
+            safeRedisOperation(() -> redisTemplate.opsForHash().increment(postKey, "commentCount", 1));
 
         // After comment logic, increment interaction if not self-comment
         incrementInteractionCountIfNeeded(userId, post.getUser().getId());
@@ -531,7 +586,7 @@ public class PostService {
 
         // 5) Decrement the comment count in Redis
         String postKey = "post:" + postId;
-        redisTemplate.opsForHash().increment(postKey, "commentCount", -1);
+        safeRedisOperation(() -> redisTemplate.opsForHash().increment(postKey, "commentCount", -1));
 
     }
 
@@ -679,7 +734,8 @@ public class PostService {
     public PostDto getPostForFeed(Long postId) {
         String postKey = "post:" + postId;
         // Try to fetch from Redis
-        Map<Object, Object> cached = redisTemplate.opsForHash().entries(postKey);
+        Map<Object, Object> cached = safeRedisOperation(() -> redisTemplate.opsForHash().entries(postKey),
+                Collections.emptyMap());
 
         if (cached != null && !cached.isEmpty()) {
             // Build DTO from Redis hash
@@ -717,16 +773,18 @@ public class PostService {
         PostDto dto = convertToDto(post);
 
         // Repopulate Redis (optional: handle in async/background for massive scale)
-        redisTemplate.opsForHash().put(postKey, "content", dto.getContent());
-        redisTemplate.opsForHash().put(postKey, "createdAt", dto.getCreatedAt().toString());
-        redisTemplate.opsForHash().put(postKey, "likeCount", String.valueOf(dto.getLikeCount()));
-        redisTemplate.opsForHash().put(postKey, "commentCount", String.valueOf(dto.getCommentCount()));
-        redisTemplate.opsForHash().put(postKey, "shareCount", String.valueOf(dto.getShareCount()));
-        if (dto.getMedia() != null && !dto.getMedia().isEmpty()) {
-            redisTemplate.opsForHash().put(postKey, "mediaUrls",
-                    dto.getMedia().stream().map(PostMediaDto::getMediaUrl).collect(Collectors.joining(",")));
-        }
-        redisTemplate.expire(postKey, Duration.ofDays(7));
+        safeRedisOperation(() -> {
+            redisTemplate.opsForHash().put(postKey, "content", dto.getContent());
+            redisTemplate.opsForHash().put(postKey, "createdAt", dto.getCreatedAt().toString());
+            redisTemplate.opsForHash().put(postKey, "likeCount", String.valueOf(dto.getLikeCount()));
+            redisTemplate.opsForHash().put(postKey, "commentCount", String.valueOf(dto.getCommentCount()));
+            redisTemplate.opsForHash().put(postKey, "shareCount", String.valueOf(dto.getShareCount()));
+            if (dto.getMedia() != null && !dto.getMedia().isEmpty()) {
+                redisTemplate.opsForHash().put(postKey, "mediaUrls",
+                        dto.getMedia().stream().map(PostMediaDto::getMediaUrl).collect(Collectors.joining(",")));
+            }
+            redisTemplate.expire(postKey, Duration.ofDays(7));
+        });
 
         return dto;
     }
@@ -807,7 +865,7 @@ public class PostService {
         sharedPost.setCreatedAt(LocalDateTime.now());
 
         boolean originalParentExist = originalPost.getParentPostId() != null && originalPost.getParentPostId() != -1;
-        Post originalParentPost=null;
+        Post originalParentPost = null;
         if (originalParentExist) {
             originalParentPost = postRepo.findById(originalPost.getParentPostId())
                     .orElseThrow(() -> new IllegalArgumentException("Original parent post not found"));
@@ -830,10 +888,10 @@ public class PostService {
 
         String postKey = "post:" + postId;
         if (!userId.equals(originalPost.getUser().getId()))
-            redisTemplate.opsForHash().increment(postKey, "shareCount", 1);
+            safeRedisOperation(() -> redisTemplate.opsForHash().increment(postKey, "shareCount", 1));
 
         // 6) Optionally set a TTL so old posts auto‐expire:
-        redisTemplate.expire(postKey, Duration.ofDays(7));
+        safeRedisOperation(() -> redisTemplate.expire(postKey, Duration.ofDays(7)));
 
         // 7) Trigger the event listener to update feeds and caches
         triggerEventListerner(sharedPost); // This will publish the PostCreatedEvent
@@ -843,22 +901,24 @@ public class PostService {
         // Parent info: parentPostId, parentAuthorId, parentAuthorName,
         // parentAuthorAvatarUrl
         Long parentPostId = sharedPost.getParentPostId();
-         {
+        {
             Post parentPost = originalParentExist ? originalParentPost : originalPost;
             if (parentPost != null && parentPost.getUser() != null) {
-                redisTemplate.opsForHash().put(sharedPostKey, "parentPostId", String.valueOf(parentPostId));
-                redisTemplate.opsForHash().put(sharedPostKey, "parentAuthorId",
-                        String.valueOf(parentPost.getUser().getId()));
-                redisTemplate.opsForHash().put(sharedPostKey, "parentAuthorName",
-                        parentPost.getUser().getUsername() != null ? parentPost.getUser().getUsername() : "");
-                redisTemplate.opsForHash().put(sharedPostKey, "parentAuthorAvatarUrl",
-                        parentPost.getUser().getProfilePictureUrl() != null
-                                ? parentPost.getUser().getProfilePictureUrl()
-                                : "");
-                redisTemplate.opsForHash().put(sharedPostKey, "parentPostContentSnippet",
-                        parentPost.getContent().length() <= 200
-                                ? parentPost.getContent()
-                                : parentPost.getContent().substring(0, 200));
+                safeRedisOperation(() -> {
+                    redisTemplate.opsForHash().put(sharedPostKey, "parentPostId", String.valueOf(parentPostId));
+                    redisTemplate.opsForHash().put(sharedPostKey, "parentAuthorId",
+                            String.valueOf(parentPost.getUser().getId()));
+                    redisTemplate.opsForHash().put(sharedPostKey, "parentAuthorName",
+                            parentPost.getUser().getUsername() != null ? parentPost.getUser().getUsername() : "");
+                    redisTemplate.opsForHash().put(sharedPostKey, "parentAuthorAvatarUrl",
+                            parentPost.getUser().getProfilePictureUrl() != null
+                                    ? parentPost.getUser().getProfilePictureUrl()
+                                    : "");
+                    redisTemplate.opsForHash().put(sharedPostKey, "parentPostContentSnippet",
+                            parentPost.getContent().length() <= 200
+                                    ? parentPost.getContent()
+                                    : parentPost.getContent().substring(0, 200));
+                });
             }
         }
 
@@ -874,7 +934,7 @@ public class PostService {
         if (actorUserId == null || postAuthorId == null || actorUserId.equals(postAuthorId))
             return;
         String key = "interaction:" + actorUserId + "," + postAuthorId;
-        redisTemplate.opsForValue().increment(key, 1);
+        safeRedisOperation(() -> redisTemplate.opsForValue().increment(key, 1));
     }
 
 }
