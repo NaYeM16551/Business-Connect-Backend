@@ -28,7 +28,6 @@ import com.example.demo.service.Posts.PostService;
 
 @RestController
 @RequestMapping("/api/groups")
-@CrossOrigin(origins = "*")
 public class GroupController {
 
     @Autowired
@@ -59,6 +58,7 @@ public class GroupController {
     // Get all groups for a user
     @GetMapping("/my-groups")
     public ResponseEntity<List<GroupResponse>> getMyGroups(Authentication authentication) {
+        System.out.println("Authentication: " + authentication);
         try{
             // Get user ID from authentication
             Long userId = Long.valueOf(authentication.getName());
