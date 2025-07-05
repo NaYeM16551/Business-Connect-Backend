@@ -455,33 +455,127 @@ public class GroupService {
         logger.info("Searching groups with term: '{}' for user: {}", searchTerm, userId);
 
         try {
+            // Validate repository dependency
+            if (groupRepository == null) {
+                logger.error("GroupRepository is null");
+                throw new IllegalStateException("GroupRepository not properly injected");
+            }
+
             List<Group> groups;
 
             if (searchTerm == null || searchTerm.trim().isEmpty()) {
-                // Return all public groups
-                groups = groupRepository.findByPrivacy(Group.Privacy.PUBLIC);
+                logger.info("Empty search term, returning all public groups");
+                try {
+                    groups = groupRepository.findByPrivacy(Group.Privacy.PUBLIC);
+                } catch (Exception e) {
+                    logger.error("Error fetching public groups: {}", e.getMessage(), e);
+                    throw new RuntimeException("Database error while fetching public groups", e);
+                }
             } else {
-                // Search by name or description
-                groups = groupRepository.searchByNameOrDescriptionAndPrivacy(searchTerm.trim(), Group.Privacy.PUBLIC);
+                logger.info("Searching with term: '{}'", searchTerm.trim());
+                try {
+                    groups = groupRepository.searchByNameOrDescriptionAndPrivacy(searchTerm.trim(),
+                            Group.Privacy.PUBLIC);
+                } catch (Exception e) {
+                    logger.error("Error searching groups with term '{}': {}", searchTerm.trim(), e.getMessage(), e);
+                    throw new RuntimeException("Database error while searching groups", e);
+                }
             }
 
-            return groups.stream()
-                    .filter(group -> group != null && group.getOwner() != null)
+            if (groups == null) {
+                logger.warn("Repository returned null groups list");
+                return List.of();
+            }
+
+            logger.info("Found {} groups matching search criteria", groups.size());
+
+            if (groups.isEmpty()) {
+                logger.info("No groups found, returning empty list");
+                return List.of();
+            }
+
+            List<GroupResponse> responses = groups.stream()
+                    .filter(group -> {
+                        if (group == null) {
+                            logger.warn("Found null group in search results, skipping");
+                            return false;
+                        }
+                        if (group.getOwner() == null) {
+                            logger.warn("Found group {} with null owner, skipping", group.getId());
+                            return false;
+                        }
+                        return true;
+                    })
                     .map(group -> {
                         try {
-                            return getGroupById(group.getId(), userId);
+                            logger.debug("Processing group: {} ({})", group.getId(), group.getName());
+                            return convertToGroupResponse(group, userId);
                         } catch (Exception e) {
                             logger.error("Error processing search result for group {}: {}", group.getId(),
-                                    e.getMessage());
+                                    e.getMessage(), e);
                             return null;
                         }
                     })
                     .filter(response -> response != null)
                     .collect(Collectors.toList());
 
+            logger.info("Successfully processed {} group responses", responses.size());
+            return responses;
+
+        } catch (RuntimeException e) {
+            logger.error("Runtime error searching groups with term '{}': {}", searchTerm, e.getMessage(), e);
+            throw e; // Re-throw to be handled by controller
         } catch (Exception e) {
-            logger.error("Error searching groups: {}", e.getMessage(), e);
-            return List.of();
+            logger.error("Unexpected error searching groups with term '{}': {}", searchTerm, e.getMessage(), e);
+            throw new RuntimeException("Unexpected error during group search", e);
+        }
+    }
+
+    /**
+     * Convert Group entity to GroupResponse (optimized for search)
+     */
+    private GroupResponse convertToGroupResponse(Group group, Long userId) {
+        try {
+            GroupResponse response = new GroupResponse();
+            response.setId(group.getId());
+            response.setName(group.getName());
+            response.setDescription(group.getDescription());
+            response.setPrivacy(group.getPrivacy());
+            response.setOwnerId(group.getOwner().getId());
+            response.setOwnerName(group.getOwner().getUsername());
+            response.setCreatedAt(group.getCreatedAt());
+            response.setCoverImage(group.getCoverImage());
+            response.setMemberCount(group.getMemberCount());
+            response.setPostCount(group.getPostCount());
+
+            // Set membership info if userId provided
+            if (userId != null) {
+                try {
+                    boolean isMember = isMember(group.getId(), userId);
+                    response.setIsMember(isMember);
+
+                    if (isMember) {
+                        Optional<GroupMembership.Role> role = getRole(group.getId(), userId);
+                        response.setUserRole(role.map(Enum::name).orElse(null));
+                    } else {
+                        response.setUserRole(null);
+                    }
+                } catch (Exception e) {
+                    logger.warn("Error checking membership for group {} and user {}: {}",
+                            group.getId(), userId, e.getMessage());
+                    response.setIsMember(false);
+                    response.setUserRole(null);
+                }
+            } else {
+                response.setIsMember(false);
+                response.setUserRole(null);
+            }
+
+            return response;
+
+        } catch (Exception e) {
+            logger.error("Error converting group {} to response: {}", group.getId(), e.getMessage(), e);
+            throw new RuntimeException("Error converting group to response", e);
         }
     }
 
