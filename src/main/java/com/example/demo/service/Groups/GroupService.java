@@ -1,20 +1,23 @@
 package com.example.demo.service.Groups;
 
-import com.example.demo.model.Groups.*;
-import com.example.demo.model.User;
-import com.example.demo.model.Posts.Post;
-import com.example.demo.repository.Groups.*;
-import com.example.demo.repository.UserRepository;
-import com.example.demo.repository.Posts.PostRepository;
-import com.example.demo.dto.Groups.GroupResponse;
-import com.example.demo.dto.Groups.GroupMemberResponse;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
+import com.example.demo.dto.Groups.GroupMemberResponse;
+import com.example.demo.dto.Groups.GroupResponse;
+import com.example.demo.model.User;
+import com.example.demo.model.Groups.Group;
+import com.example.demo.model.Groups.GroupMembership;
+import com.example.demo.model.Groups.GroupMembershipId;
+import com.example.demo.repository.UserRepository;
+import com.example.demo.repository.Groups.GroupMembershipRepository;
+import com.example.demo.repository.Groups.GroupRepository;
+import com.example.demo.repository.Posts.PostRepository;
 
 @Service
 public class GroupService {
@@ -30,7 +33,7 @@ public class GroupService {
 
     @Transactional
     public Group createGroup(String name, String description,
-                             Group.Privacy privacy, Long ownerId) {
+            Group.Privacy privacy, Long ownerId) {
         User owner = userRepo.findById(ownerId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
 
@@ -114,7 +117,8 @@ public class GroupService {
         GroupMembership adminMembership = membershipRepo.findById(new GroupMembershipId(groupId, adminUserId))
                 .orElseThrow(() -> new IllegalArgumentException("Admin user is not a member of this group"));
 
-        if (adminMembership.getRole() != GroupMembership.Role.OWNER && adminMembership.getRole() != GroupMembership.Role.ADMIN) {
+        if (adminMembership.getRole() != GroupMembership.Role.OWNER
+                && adminMembership.getRole() != GroupMembership.Role.ADMIN) {
             throw new IllegalStateException("Only owners and admins can change member roles");
         }
 
@@ -136,7 +140,8 @@ public class GroupService {
         GroupMembership adminMembership = membershipRepo.findById(new GroupMembershipId(groupId, adminUserId))
                 .orElseThrow(() -> new IllegalArgumentException("Admin user is not a member of this group"));
 
-        if (adminMembership.getRole() != GroupMembership.Role.OWNER && adminMembership.getRole() != GroupMembership.Role.ADMIN) {
+        if (adminMembership.getRole() != GroupMembership.Role.OWNER
+                && adminMembership.getRole() != GroupMembership.Role.ADMIN) {
             throw new IllegalStateException("Only owners and admins can remove members");
         }
 
@@ -157,7 +162,8 @@ public class GroupService {
     }
 
     @Transactional
-    public void updateGroup(Long groupId, Long adminUserId, String name, String description, Group.Privacy privacy, String coverImage) {
+    public void updateGroup(Long groupId, Long adminUserId, String name, String description, Group.Privacy privacy,
+            String coverImage) {
         Group group = groupRepo.findById(groupId)
                 .orElseThrow(() -> new IllegalArgumentException("Group not found"));
 
@@ -169,10 +175,14 @@ public class GroupService {
             throw new IllegalStateException("Only owners and admins can update group settings");
         }
 
-        if (name != null) group.setName(name);
-        if (description != null) group.setDescription(description);
-        if (privacy != null) group.setPrivacy(privacy);
-        if (coverImage != null) group.setCoverImage(coverImage);
+        if (name != null)
+            group.setName(name);
+        if (description != null)
+            group.setDescription(description);
+        if (privacy != null)
+            group.setPrivacy(privacy);
+        if (coverImage != null)
+            group.setCoverImage(coverImage);
 
         groupRepo.save(group);
     }
@@ -203,7 +213,7 @@ public class GroupService {
 
     public Optional<GroupMembership.Role> getRole(Long groupId, Long userId) {
         return membershipRepo.findById(new GroupMembershipId(groupId, userId))
-                             .map(GroupMembership::getRole);
+                .map(GroupMembership::getRole);
     }
 
     public GroupResponse getGroupById(Long groupId, Long userId) {
@@ -280,5 +290,6 @@ public class GroupService {
         return role.isPresent() && role.get() != GroupMembership.Role.BANNED;
     }
 
-    // Additional methods: leaveGroup, renameGroup, changePrivacy, promote/demote roles, banUser...
+    // Additional methods: leaveGroup, renameGroup, changePrivacy, promote/demote
+    // roles, banUser...
 }

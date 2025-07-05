@@ -1,18 +1,30 @@
 package com.example.demo.controller;
 
-import com.example.demo.dto.Groups.*;
+import java.io.IOException;
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.example.demo.dto.Groups.CreateGroupRequest;
+import com.example.demo.dto.Groups.GroupMemberResponse;
+import com.example.demo.dto.Groups.GroupResponse;
 import com.example.demo.model.Groups.Group;
 import com.example.demo.model.Groups.GroupMembership;
 import com.example.demo.service.Groups.GroupService;
 import com.example.demo.service.Posts.PostService;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
-
-import java.io.IOException;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/groups")
@@ -27,9 +39,11 @@ public class GroupController {
 
     // Create a new group
     @PostMapping
-    public ResponseEntity<GroupResponse> createGroup(@RequestBody CreateGroupRequest request, Authentication authentication) {
+    public ResponseEntity<GroupResponse> createGroup(@RequestBody CreateGroupRequest request,
+            Authentication authentication) {
         Long userId = Long.valueOf(authentication.getName());
-        Group group = groupService.createGroup(request.getName(), request.getDescription(), request.getPrivacy(), userId);
+        Group group = groupService.createGroup(request.getName(), request.getDescription(), request.getPrivacy(),
+                userId);
         GroupResponse response = groupService.getGroupById(group.getId(), userId);
         return ResponseEntity.ok(response);
     }
@@ -76,7 +90,8 @@ public class GroupController {
 
     // Get group members
     @GetMapping("/{groupId}/members")
-    public ResponseEntity<List<GroupMemberResponse>> getGroupMembers(@PathVariable Long groupId, Authentication authentication) {
+    public ResponseEntity<List<GroupMemberResponse>> getGroupMembers(@PathVariable Long groupId,
+            Authentication authentication) {
         Long userId = Long.valueOf(authentication.getName());
         List<GroupMemberResponse> members = groupService.getGroupMembers(groupId, userId);
         return ResponseEntity.ok(members);
@@ -113,7 +128,8 @@ public class GroupController {
             @RequestBody CreateGroupRequest request,
             Authentication authentication) {
         Long adminUserId = Long.valueOf(authentication.getName());
-        groupService.updateGroup(groupId, adminUserId, request.getName(), request.getDescription(), request.getPrivacy(), request.getCoverImage());
+        groupService.updateGroup(groupId, adminUserId, request.getName(), request.getDescription(),
+                request.getPrivacy(), request.getCoverImage());
         return ResponseEntity.ok("Group updated successfully");
     }
 
@@ -133,7 +149,7 @@ public class GroupController {
             @RequestParam(value = "files", required = false) MultipartFile[] files,
             Authentication authentication) throws IOException {
         Long userId = Long.valueOf(authentication.getName());
-        
+
         // Check if user can post in group
         if (!groupService.canPostInGroup(groupId, userId)) {
             return ResponseEntity.badRequest().body(null);
@@ -152,7 +168,7 @@ public class GroupController {
             @RequestParam(defaultValue = "10") int size,
             Authentication authentication) {
         Long userId = Long.valueOf(authentication.getName());
-        
+
         // Check if user is member of group
         if (!groupService.isMember(groupId, userId)) {
             return ResponseEntity.badRequest().body(null);
@@ -161,4 +177,4 @@ public class GroupController {
         List<com.example.demo.dto.Posts.PostDto> posts = postService.getPostsByGroupId(groupId, page, size);
         return ResponseEntity.ok(posts);
     }
-} 
+}
