@@ -208,7 +208,7 @@ public class PostService {
                 post.getMedia().add(media);
             }
         }
-        triggerEventListerner(post);
+        //triggerEventListerner(post);
         return post.getId();
     }
 
