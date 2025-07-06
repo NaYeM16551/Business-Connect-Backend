@@ -520,6 +520,7 @@ public class GroupService {
                     .collect(Collectors.toList());
 
             logger.info("Successfully processed {} group responses", responses.size());
+            System.out.println("Successfully processed " + responses.size() + " group responses");
             return responses;
 
         } catch (RuntimeException e) {
