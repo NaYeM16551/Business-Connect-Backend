@@ -74,34 +74,37 @@ public class GroupController {
     }
 
     // Search groups
-    @GetMapping("/search")
-    public ResponseEntity<?> searchGroups(@RequestParam String query, Authentication authentication) {
-        try {
-            Long userId = Long.valueOf(authentication.getName());
-            System.out.println("Searching groups with query: '" + query + "' for user: " + userId);
+   @GetMapping("/search")
+public ResponseEntity<?> searchGroups(
+        @RequestParam(value = "query", required = false, defaultValue = "") String query,
+        Authentication authentication) {
+    try {
+        Long userId = Long.valueOf(authentication.getName());
+        System.out.println("Searching groups with query: '" + query + "' for user: " + userId);
 
-            List<GroupResponse> groups = groupService.searchGroups(query, userId);
-            System.out.println("Found " + groups.size() + " groups");
+        List<GroupResponse> groups = groupService.searchGroups(query, userId);
+        System.out.println("Found " + groups.size() + " groups");
 
-            return ResponseEntity.ok(groups);
+        return ResponseEntity.ok(groups);
 
-        } catch (NumberFormatException e) {
-            System.err.println("Invalid user ID format: " + e.getMessage());
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Invalid user authentication", "message", e.getMessage()));
+    } catch (NumberFormatException e) {
+        System.err.println("Invalid user ID format: " + e.getMessage());
+        return ResponseEntity.badRequest()
+                .body(Map.of("error", "Invalid user authentication", "message", e.getMessage()));
 
-        } catch (RuntimeException e) {
-            System.err.println("Runtime error searching groups: " + e.getMessage());
-            return ResponseEntity.status(500)
-                    .body(Map.of("error", "Internal server error", "message", e.getMessage()));
+    } catch (RuntimeException e) {
+        System.err.println("Runtime error searching groups: " + e.getMessage());
+        return ResponseEntity.status(500)
+                .body(Map.of("error", "Internal server error", "message", e.getMessage()));
 
-        } catch (Exception e) {
-            System.err.println("Unexpected error searching groups: " + e.getMessage());
-            e.printStackTrace();
-            return ResponseEntity.status(500)
-                    .body(Map.of("error", "Unexpected error", "message", "An unexpected error occurred"));
-        }
+    } catch (Exception e) {
+        System.err.println("Unexpected error searching groups: " + e.getMessage());
+        e.printStackTrace();
+        return ResponseEntity.status(500)
+                .body(Map.of("error", "Unexpected error", "message", "An unexpected error occurred"));
     }
+}
+
 
     // Join a group
     @PostMapping("/{groupId}/join")
@@ -202,8 +205,10 @@ public class GroupController {
 
         // Check if user is member of group
         if (!groupService.isMember(groupId, userId)) {
+            System.out.println("User " + userId + " is not a member of group " + groupId);
             return ResponseEntity.badRequest().body(null);
         }
+        System.out.println("Fetching posts for group " + groupId + " with page " + page + " and size " + size);
 
         List<com.example.demo.dto.Posts.PostDto> posts = postService.getPostsByGroupId(groupId, page, size);
         return ResponseEntity.ok(posts);

@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Comparator;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -207,7 +208,7 @@ public class PostService {
                 post.getMedia().add(media);
             }
         }
-        triggerEventListerner(post);
+        //triggerEventListerner(post);
         return post.getId();
     }
 
@@ -298,20 +299,20 @@ public class PostService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
     public List<PostDto> getPostsByGroupId(Long groupId, int page, int size) {
-        // This would need a custom query in PostRepository
-        // For now, we'll get all posts and filter by group
         List<Post> allPosts = postRepo.findAll();
         List<Post> groupPosts = allPosts.stream()
-                .filter(post -> post.getGroup() != null && post.getGroup().getId().equals(groupId))
-                .sorted((p1, p2) -> p2.getCreatedAt().compareTo(p1.getCreatedAt()))
-                .skip(page * size)
-                .limit(size)
-                .toList();
+            .filter(post -> post.getGroup() != null && post.getGroup().getId().equals(groupId))
+            .sorted(Comparator.comparing(Post::getCreatedAt).reversed())
+            .skip((long) page * size)
+            .limit(size)
+            .toList();
 
+        // Still in a transaction / Hibernate session, so lazy media will load
         return groupPosts.stream()
-                .map(this::convertToDto)
-                .toList();
+                         .map(this::convertToDto)
+                         .toList();
     }
 
     private PostDto convertToDto(Post post) {
