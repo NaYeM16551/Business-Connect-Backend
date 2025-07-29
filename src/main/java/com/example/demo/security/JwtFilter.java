@@ -39,7 +39,9 @@ public class JwtFilter extends OncePerRequestFilter {
                 path.equals("/api/v1/auth/register-verify") ||
                 path.equals("/api/v1/auth/reset-password") ||
                 path.equals("/api/v1/auth/register") ||
-                path.contains("/verify-email")) {
+                path.contains("/verify-email") ||
+                path.contains("ws/info") || // Allow WebSocket info endpoint
+                path.contains("ws")) { // Allow WebSocket endpoints) {
             filterChain.doFilter(request, response);
             return;
         }

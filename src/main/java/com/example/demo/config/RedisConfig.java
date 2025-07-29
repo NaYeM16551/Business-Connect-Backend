@@ -75,7 +75,7 @@ public class RedisConfig {
         poolConfig.setTestOnReturn(true);
         poolConfig.setTestWhileIdle(true);
         poolConfig.setTimeBetweenEvictionRuns(Duration.ofMillis(30000));
-        poolConfig.setMinEvictableIdleDuration(Duration.ofMillis(60000));
+        poolConfig.setMinEvictableIdleTime(Duration.ofMillis(60000));
         poolConfig.setNumTestsPerEvictionRun(3);
 
         // Configure Lettuce client with connection pooling and timeouts

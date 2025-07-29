@@ -9,4 +9,5 @@ public class RegisterRequest {
     public List<String> industry; // optional
     public List<String> interests;
     public List<String> achievements; // optional
+    public String role; // new field for user role
 }

@@ -1,26 +1,26 @@
 package com.example.demo.service;
 
-import com.example.demo.dto.LoginRequest;
-import com.example.demo.dto.LoginResponse;
-import com.example.demo.dto.RegisterRequest;
-import com.example.demo.dto.RegisterResponse;
-import com.example.demo.model.RegisterVerifyUser;
-import com.example.demo.model.User;
-import com.example.demo.repository.RegisterVerifyUserRepository;
-import com.example.demo.repository.UserRepository;
-import com.example.demo.security.JwtUtil;
-
-import com.example.demo.repository.Follow_Unfollow.FollowUnfollowRepository;
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.Map;
-import java.util.UUID;
-import java.util.Optional;
+import com.example.demo.dto.LoginRequest;
+import com.example.demo.dto.LoginResponse;
+import com.example.demo.dto.RegisterRequest;
+import com.example.demo.dto.RegisterResponse;
+import com.example.demo.dto.User.UserMeResponse;
+import com.example.demo.model.RegisterVerifyUser;
+import com.example.demo.model.User;
+import com.example.demo.repository.RegisterVerifyUserRepository;
+import com.example.demo.repository.UserRepository;
+import com.example.demo.repository.Follow_Unfollow.FollowUnfollowRepository;
+import com.example.demo.security.JwtUtil;
 
 @Service
 public class AuthService {
@@ -77,27 +77,24 @@ public class AuthService {
 
         registerVerifyUserRepository.save(user);
 
-        String url = frontendUrl+"verify-email?token=";
+        String url = frontendUrl + "verify-email?token=";
 
         mailService.sendVerificationEmail(user.getEmail(), user.getVerificationToken(), url);
 
-
         return new String("verification mail sent");
-        
-    
+
     }
 
     public RegisterResponse register(RegisterRequest request) {
 
         System.out.println(request.email);
 
-        Optional<RegisterVerifyUser> optionalVerifyUser = registerVerifyUserRepository.findByEmail(request.email);
+        // if ((optionalVerifyUser.isPresent() &&
+        // !optionalVerifyUser.get().getIsVerified())
+        // || !optionalVerifyUser.isPresent()) {
+        // throw new IllegalArgumentException("Email not verified");
 
-        if ((optionalVerifyUser.isPresent() && !optionalVerifyUser.get().getIsVerified())
-                || !optionalVerifyUser.isPresent()) {
-            throw new IllegalArgumentException("Email not verified");
-
-        }
+        // }
 
         Optional<User> optional = userRepository.findByEmail(request.email);
         User user;
@@ -118,6 +115,9 @@ public class AuthService {
         user.setIndustry(request.industry);
         user.setInterests(request.interests);
         user.setAchievements(request.achievements);
+        user.setRole(request.role); // Set the role from the request
+
+        System.out.println("user role: " + user.getRole());
 
         User savedUser = userRepository.save(user);
 
@@ -163,14 +163,14 @@ public class AuthService {
         if (user.getVerificationTokenExpiry().isBefore(LocalDateTime.now())) {
             throw new IllegalArgumentException("Verification token has expired.");
         }
-        
+
         user.setIsVerified(true);
         user.setVerificationToken(null);
         user.setVerificationTokenExpiry(null);
         registerVerifyUserRepository.save(user);
         String jwt = jwtUtil.generateToken(user.getEmail());
-        return Map.of("email", user.getEmail(),"token",jwt);
-        
+        return Map.of("email", user.getEmail(), "token", jwt);
+
     }
 
     public void updateProfile(String token, RegisterRequest request) {
@@ -240,4 +240,19 @@ public class AuthService {
         userRepository.save(user);
     }
 
+    public UserMeResponse getCurrentUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        return new UserMeResponse(
+                user.getId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getRole(),
+                user.getIndustry(),
+                user.getInterests(),
+                user.getAchievements(),
+                user.getProfilePictureUrl()
+        );
+    }
 }

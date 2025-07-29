@@ -41,7 +41,8 @@ public class GroupController {
     public ResponseEntity<GroupResponse> createGroup(@RequestBody CreateGroupRequest request,
             Authentication authentication) {
         Long userId = Long.valueOf(authentication.getName());
-        Group group = groupService.createGroup(request.getName(), request.getDescription(), request.getPrivacy(),
+        System.out.println("Group type from request: " + request.getType());
+        Group group = groupService.createGroup(request.getName(),request.getType(), request.getDescription(), request.getPrivacy(),
                 userId);
         GroupResponse response = groupService.getGroupById(group.getId(), userId);
         return ResponseEntity.ok(response);
@@ -73,8 +74,25 @@ public class GroupController {
 
     }
 
+     @GetMapping("/recommended-groups")
+    public ResponseEntity<List<GroupResponse>> getRecommendedGroups(Authentication authentication) {
+        System.out.println("Authentication: " + authentication);
+        try {
+            // Get user ID from authentication
+            Long userId = Long.valueOf(authentication.getName());
+            System.out.println("userId: " + userId);
+            List<GroupResponse> groups = groupService.getGroupsByUserRole(userId);
+            System.out.println("Groups fetched: " + groups);
+            return ResponseEntity.ok(groups);
+        } catch (NumberFormatException e) {
+            // Handle case where authentication name is not a valid Long
+            return ResponseEntity.badRequest().body(null);
+        }
+
+    }
+
     // Search groups
-    @GetMapping("/search")
+   @GetMapping("/search")
 public ResponseEntity<?> searchGroups(
         @RequestParam(value = "query", required = false, defaultValue = "") String query,
         Authentication authentication) {
@@ -205,8 +223,10 @@ public ResponseEntity<?> searchGroups(
 
         // Check if user is member of group
         if (!groupService.isMember(groupId, userId)) {
+            System.out.println("User " + userId + " is not a member of group " + groupId);
             return ResponseEntity.badRequest().body(null);
         }
+        System.out.println("Fetching posts for group " + groupId + " with page " + page + " and size " + size);
 
         List<com.example.demo.dto.Posts.PostDto> posts = postService.getPostsByGroupId(groupId, page, size);
         return ResponseEntity.ok(posts);

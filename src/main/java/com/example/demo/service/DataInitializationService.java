@@ -50,18 +50,21 @@ public class DataInitializationService implements CommandLineRunner {
             // Create sample groups
             groupService.createGroup(
                     "Tech Enthusiasts",
+                    "research",
                     "A group for technology lovers and innovators",
                     Group.Privacy.PUBLIC,
                     user.getId());
 
             groupService.createGroup(
                     "Business Network",
+                    "invest",
                     "Connect with business professionals and entrepreneurs",
                     Group.Privacy.PUBLIC,
                     user.getId());
 
             groupService.createGroup(
                     "Developers Hub",
+                    "Business",
                     "Share coding tips, projects, and collaborate on development",
                     Group.Privacy.PUBLIC,
                     user.getId());

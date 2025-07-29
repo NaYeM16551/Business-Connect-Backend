@@ -48,6 +48,9 @@ public class User {
     @Column(nullable = false)
     private List<String> interests;
 
+    @NotBlank
+    private String role="Businessman";
+
     @ElementCollection
     private List<String> achievements; // Optional
 
@@ -171,6 +174,13 @@ public class User {
 
     public void setPosts(List<Post> posts) {
         this.posts = posts;
+    }
+
+    public String getRole() {
+        return role;
+    }
+    public void setRole(String role) {
+        this.role = role;
     }
 
 }

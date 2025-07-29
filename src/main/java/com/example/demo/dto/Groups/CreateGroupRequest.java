@@ -4,6 +4,7 @@ import com.example.demo.model.Groups.Group.Privacy;
 
 public class CreateGroupRequest {
     private String name;
+    private String type;
     private String description;
     private Privacy privacy;
     private String coverImage;
@@ -15,6 +16,14 @@ public class CreateGroupRequest {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getType() {
+        return this.type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
     }
 
     public String getDescription() {
@@ -40,4 +49,5 @@ public class CreateGroupRequest {
     public void setCoverImage(String coverImage) {
         this.coverImage = coverImage;
     }
-} 
+
+}

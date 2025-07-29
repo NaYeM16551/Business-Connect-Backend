@@ -56,14 +56,12 @@ public class FollowUnfollowController {
      * GET /api/v1/connections/following/{userID}
      * Returns the list of User objects that {userID} is following.
      */
-    @GetMapping("/following/{userID}")
-    public ResponseEntity<?> getFollowing(@PathVariable("userID") Long userId, Authentication authentication) {
-        Long ownerId = Long.valueOf(authentication.getName());
-        if( !ownerId.equals(userId)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(Map.of("error", "You can only view your own following list."));
-        }
+    @GetMapping("/following")
+    public ResponseEntity<?> getFollowing(Authentication authentication) {
+        Long userId = Long.valueOf(authentication.getName());
+        System.out.println("Getting following list for user: " + userId);
         List<UserResponse> followingList = followUnfollowService.getAllFollowees(userId);
+        System.out.println("Following list size: " + followingList.size());
         return ResponseEntity.ok(followingList);
     }
 

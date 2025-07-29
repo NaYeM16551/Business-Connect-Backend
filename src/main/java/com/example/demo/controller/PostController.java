@@ -28,6 +28,16 @@ public class PostController {
             @RequestParam(value = "files", required = false) MultipartFile[] files,
             Principal principal) {
         try {
+            // Optional: Add basic validation for files
+            if (files != null) {
+                for (MultipartFile file : files) {
+                    if (file.getSize() > 20 * 1024 * 1024) { // 20MB limit
+                        return ResponseEntity
+                                .status(HttpStatus.BAD_REQUEST)
+                                .body(Map.of("error", "File size exceeds 20MB limit: " + file.getOriginalFilename()));
+                    }
+                }
+            }
 
             // 3) Delegate to service (which may throw business exceptions or IO errors)
             Long postId = postService.createPost(content, files, principal);
@@ -36,6 +46,11 @@ public class PostController {
             return ResponseEntity.ok(Map.of(
                     "message", "Post created",
                     "postId", postId));
+        } catch (IllegalArgumentException e) {
+            // Handle file validation errors
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
 
             return ResponseEntity
@@ -59,19 +74,33 @@ public class PostController {
             }
             Long userId = Long.valueOf(principal.getName());
 
+            // Optional: Add basic validation for files
+            if (files != null) {
+                for (MultipartFile file : files) {
+                    if (file.getSize() > 20 * 1024 * 1024) { // 20MB limit
+                        return ResponseEntity
+                                .status(HttpStatus.BAD_REQUEST)
+                                .body(Map.of("error", "File size exceeds 20MB limit: " + file.getOriginalFilename()));
+                    }
+                }
+            }
+
             // 2) Delegate to service
             postService.editPost(postId, content, files, userId);
 
             // 3) Return success response
             return ResponseEntity.ok(Map.of("message", "Post edited successfully"));
+        } catch (IllegalArgumentException e) {
+            // Handle file validation errors
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity
                     .status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", e.getMessage()));
         }
     }
-
-   
 
     @GetMapping("/{postId}")
     public ResponseEntity<?> getPostById(@PathVariable Long postId) {
@@ -186,7 +215,8 @@ public class PostController {
             return ResponseEntity.badRequest().body(Map.of("error", "Invalid user ID in Principal"));
         }
         try {
-            Long comment_id=postService.commentOnPost(postId, userId, commentMap.get("comment"),Long.valueOf(commentMap.get("parentCommentId")==null? "-10":commentMap.get("parentCommentId")));
+            Long comment_id = postService.commentOnPost(postId, userId, commentMap.get("comment"), Long
+                    .valueOf(commentMap.get("parentCommentId") == null ? "-10" : commentMap.get("parentCommentId")));
             return ResponseEntity.ok(Map.of("commentId", comment_id));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

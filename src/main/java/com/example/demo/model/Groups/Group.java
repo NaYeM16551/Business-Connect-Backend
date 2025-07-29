@@ -16,6 +16,10 @@ public class Group {
     @Column(nullable = false, length = 255)
     private String name;
 
+
+
+    private String type;
+
     @Column(columnDefinition = "TEXT")
     private String description;
 
@@ -95,6 +99,16 @@ public class Group {
     }
     public void setPostCount(Integer postCount) {
         this.postCount = postCount;
+    }
+
+    public void setType(String type)
+    {
+        this.type=type;
+    }
+
+    public String getType()
+    {
+        return this.type;
     }
     
 }

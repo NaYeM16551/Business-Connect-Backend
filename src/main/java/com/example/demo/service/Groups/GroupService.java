@@ -41,7 +41,7 @@ public class GroupService {
     /**
      * Create a new group
      */
-    public Group createGroup(String name, String description, Group.Privacy privacy, Long ownerId) {
+    public Group createGroup(String name, String type,String description, Group.Privacy privacy, Long ownerId) {
         logger.info("Creating group: {} for owner: {}", name, ownerId);
 
         try {
@@ -65,6 +65,7 @@ public class GroupService {
             group.setOwner(owner);
             group.setMemberCount(0);
             group.setPostCount(0);
+            group.setType(type);
 
             group = groupRepository.save(group);
             logger.info("Group created with ID: {}", group.getId());
@@ -704,5 +705,118 @@ public class GroupService {
                 adminMembership.getRole() != GroupMembership.Role.ADMIN) {
             throw new IllegalStateException("Only owners and admins can perform this action");
         }
+    }
+
+    @Transactional(readOnly = true)
+    public List<GroupResponse> getGroupsByUserRole(Long userId) {
+        logger.info("Searching groups with term: '{}' for user: {}", userId);
+
+        Optional<User> user = userRepository.findById(userId);
+
+        if(user.isEmpty()) {
+            logger.error("User not found with ID: {}", userId);
+            return List.of();
+        }
+
+        String userRole = user.get().getRole();
+
+        if(userRole==null)
+          userRole="Businessman";
+
+        System.out.println(userRole);  
+
+        /*const roles = [
+  "businessman",
+  "investor",
+  "entrepreneur",
+  "innovator",
+  "student",
+  "policy-maker",
+  "government-official",
+  "researcher",
+  "university-teacher",
+]; */
+
+        List<Group> groups;
+        if (userRole.equalsIgnoreCase("businessman")) {
+            List<String> types = List.of("business", "invest", "entrepreneur");
+            groups = groupRepository.searchByGroupTypes(types);
+        }
+
+        else if(userRole.equalsIgnoreCase("investor"))
+        {
+            List<String> types = List.of("business", "invest", "entrepreneur");
+            groups = groupRepository.searchByGroupTypes(types);
+
+        }
+
+        else if(userRole.equalsIgnoreCase("entrepreneur"))
+        {
+            List<String> types = List.of("business", "invest", "entrepreneur","innocation","student","research");
+            groups = groupRepository.searchByGroupTypes(types);
+
+        }
+
+        else if(userRole.equalsIgnoreCase("innovator"))
+        {
+            List<String> types = List.of("research", "innovation", "entrepreneur");
+            groups = groupRepository.searchByGroupTypes(types);
+
+        }
+
+        else if(userRole.equalsIgnoreCase("student"))
+        {
+            List<String> types = List.of("research", "university-teacher", "entrepreneur");
+            groups = groupRepository.searchByGroupTypes(types);
+
+        }
+
+        else if(userRole.equalsIgnoreCase("policy-maker"))
+        {
+            List<String> types = List.of("business", "invest", "entrepreneur");
+            groups = groupRepository.searchByGroupTypes(types);
+
+        }
+
+        else if(userRole.equalsIgnoreCase("government-official"))
+        {
+            List<String> types = List.of("business", "invest", "entrepreneur");
+            groups = groupRepository.searchByGroupTypes(types);
+
+        }
+
+        else if(userRole.equalsIgnoreCase("researcher"))
+        {
+            List<String> types = List.of("business", "invest", "entrepreneur");
+            groups = groupRepository.searchByGroupTypes(types);
+
+        }
+
+        else if(userRole.equalsIgnoreCase("university-teacher"))
+        {
+            List<String> types = List.of("business", "invest", "entrepreneur","government-initiatives");
+            groups = groupRepository.searchByGroupTypes(types);
+
+        }
+
+        else {
+            logger.warn("Unknown user role: {}", userRole);
+            return List.of();
+        }
+
+        List<GroupResponse> responses = groups.stream()
+                .filter(group -> group.getOwner() != null)
+                .map(group -> {
+                    try {
+                        return convertToGroupResponse(group, userId);
+                    } catch (Exception e) {
+                        logger.error("Error processing group {}: {}", group.getId(), e.getMessage());
+                        return null;
+                    }
+                })
+                .filter(response -> response != null)
+                .collect(Collectors.toList());
+
+        return responses;
     }
 }
